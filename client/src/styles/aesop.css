@@ -265,7 +265,7 @@ body {
 /* Grid Layout */
 .aesop-grid {
   display: grid;
-  grid-template-columns: 280px 1fr 340px;
+  grid-template-columns: 280px 1fr 420px;
   border-bottom: 1px solid var(--rule);
   min-height: calc(100vh - 300px);
 }

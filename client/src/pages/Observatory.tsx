@@ -9,6 +9,7 @@ import {
   drawChladniPlate,
   drawLiquidityDepth,
   drawVolatilityCurve,
+  drawCorrelationHeatmap,
   type RadarData,
   type CountryNode,
   type ExchangeMarker,
@@ -30,6 +31,7 @@ export default function Observatory() {
   const chladniCanvasRef = useRef<HTMLCanvasElement>(null);
   const liquidityCanvasRef = useRef<HTMLCanvasElement>(null);
   const volatilityCanvasRef = useRef<HTMLCanvasElement>(null);
+  const heatmapCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Fetch market data
   const etfPrices = trpc.market.etfPrices.useQuery();
@@ -198,6 +200,27 @@ export default function Observatory() {
     const prior = [16, 15.5, 15, 14.5, 14, 13.5];
 
     drawVolatilityCurve(volatilityCanvasRef.current, current, prior);
+
+    // Draw correlation heatmap
+    if (heatmapCanvasRef.current) {
+      const correlationMatrix = [
+        [1.00, 0.94, 0.91, 0.62, 0.45, 0.78, 0.55, 0.72, 0.68, 0.51, 0.42, 0.89, 0.76, 0.48],
+        [0.94, 1.00, 0.87, 0.58, 0.42, 0.75, 0.52, 0.69, 0.65, 0.48, 0.39, 0.86, 0.73, 0.45],
+        [0.91, 0.87, 1.00, 0.65, 0.48, 0.81, 0.58, 0.74, 0.70, 0.54, 0.44, 0.91, 0.78, 0.51],
+        [0.62, 0.58, 0.65, 1.00, 0.88, 0.92, 0.85, 0.79, 0.76, 0.68, 0.72, 0.64, 0.55, 0.61],
+        [0.45, 0.42, 0.48, 0.88, 1.00, 0.75, 0.82, 0.68, 0.65, 0.58, 0.72, 0.47, 0.38, 0.52],
+        [0.78, 0.75, 0.81, 0.92, 0.75, 1.00, 0.88, 0.85, 0.82, 0.75, 0.78, 0.80, 0.68, 0.72],
+        [0.55, 0.52, 0.58, 0.85, 0.82, 0.88, 1.00, 0.76, 0.73, 0.65, 0.81, 0.57, 0.48, 0.59],
+        [0.72, 0.69, 0.74, 0.79, 0.68, 0.85, 0.76, 1.00, 0.95, 0.72, 0.68, 0.74, 0.62, 0.68],
+        [0.68, 0.65, 0.70, 0.76, 0.65, 0.82, 0.73, 0.95, 1.00, 0.69, 0.65, 0.70, 0.59, 0.65],
+        [0.51, 0.48, 0.54, 0.68, 0.58, 0.75, 0.65, 0.72, 0.69, 1.00, 0.62, 0.53, 0.45, 0.58],
+        [0.42, 0.39, 0.44, 0.72, 0.72, 0.78, 0.81, 0.68, 0.65, 0.62, 1.00, 0.44, 0.35, 0.61],
+        [0.89, 0.86, 0.91, 0.64, 0.47, 0.80, 0.57, 0.74, 0.70, 0.53, 0.44, 1.00, 0.79, 0.50],
+        [0.76, 0.73, 0.78, 0.55, 0.38, 0.68, 0.48, 0.62, 0.59, 0.45, 0.35, 0.79, 1.00, 0.42],
+        [0.48, 0.45, 0.51, 0.61, 0.52, 0.72, 0.59, 0.68, 0.65, 0.58, 0.61, 0.50, 0.42, 1.00],
+      ];
+      drawCorrelationHeatmap(heatmapCanvasRef.current, correlationMatrix);
+    }
   }, []);
 
   // Format helpers
@@ -727,34 +750,14 @@ export default function Observatory() {
 
         {/* RIGHT RAIL */}
         <aside className="aesop-right-rail">
-          {/* CORRELATION MATRIX */}
-          <section className="aesop-right-section">
-            <h3 style={{ fontFamily: "var(--serif)", fontSize: "16px", fontStyle: "italic", marginTop: 0 }}>
-              Connections <span style={{ fontSize: "10px", color: "var(--ink-3)", fontStyle: "normal" }}>· VI.</span>
-            </h3>
-            <div style={{ background: "#F5F3ED", padding: "12px", minHeight: "120px", border: "1px solid var(--rule)", marginBottom: "12px" }}>
-              <div style={{ fontSize: "10px", color: "var(--ink-3)", marginBottom: "8px" }}>60D RETURN CORRELATION · CLUSTERED</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "4px" }}>
-                {["SPY", "QQQ", "EFA", "EEM", "EWJ", "MCHI", "INDA", "EWZ", "EWG", "GLD", "TLT", "HYG"].map((ticker, i) => (
-                  <div
-                    key={ticker}
-                    style={{
-                      padding: "6px",
-                      background: "#EAE3D2",
-                      border: "1px solid var(--rule)",
-                      fontSize: "9px",
-                      fontWeight: 500,
-                      textAlign: "center",
-                    }}
-                  >
-                    {ticker}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ fontSize: "9px", color: "var(--ink-3)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-              60D RETURN CORRELATION · CLUSTERED
-            </div>
+          {/* CORRELATION MATRIX HEATMAP */}
+          <section className="aesop-right-section" style={{ padding: 0 }}>
+            <canvas
+              ref={heatmapCanvasRef}
+              width={400}
+              height={500}
+              style={{ width: "100%", height: "auto", display: "block" }}
+            />
           </section>
 
           {/* STRONGEST LINKS */}

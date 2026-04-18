@@ -647,3 +647,119 @@ export function drawVolatilityCurve(
     ctx.fillText(vol.toFixed(0) + "%", padding - 10, y + 4);
   }
 }
+
+
+// Draw correlation heatmap (14x14 matrix)
+export function drawCorrelationHeatmap(
+  canvas: HTMLCanvasElement,
+  correlationMatrix: number[][]
+) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const tickers = ["SPY", "QQQ", "IWM", "ACWI", "EFA", "EEM", "EWJ", "MCHI", "INDA", "EWZ", "EWG", "EWU", "TLT", "GLD"];
+  const n = tickers.length;
+  
+  const padding = 50;
+  const cellSize = (width - padding * 2) / n;
+  const chartHeight = height - padding * 2;
+
+  // Background
+  ctx.fillStyle = "#F1ECE0";
+  ctx.fillRect(0, 0, width, height);
+
+  // Draw heatmap cells
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const corr = correlationMatrix[i]?.[j] ?? (i === j ? 1 : 0.5);
+      const x = padding + j * cellSize;
+      const y = padding + i * cellSize;
+
+      // Color gradient: red (negative) to white (0) to green (positive)
+      let r, g, b;
+      if (corr >= 0) {
+        // Green gradient (0 to 1)
+        r = Math.round(255 * (1 - corr * 0.6));
+        g = Math.round(255 * (0.4 + corr * 0.6));
+        b = Math.round(255 * (1 - corr * 0.4));
+      } else {
+        // Red gradient (-1 to 0)
+        r = Math.round(255 * (0.4 - corr * 0.6));
+        g = Math.round(255 * (1 + corr * 0.4));
+        b = Math.round(255 * (1 + corr * 0.4));
+      }
+
+      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+      ctx.fillRect(x, y, cellSize, cellSize);
+
+      // Draw border
+      ctx.strokeStyle = "#D5CFBD";
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(x, y, cellSize, cellSize);
+    }
+  }
+
+  // Draw row labels (left side)
+  ctx.fillStyle = "#5A574C";
+  ctx.font = "9px JetBrains Mono";
+  ctx.textAlign = "right";
+  tickers.forEach((ticker, i) => {
+    const y = padding + i * cellSize + cellSize / 2 + 3;
+    ctx.fillText(ticker, padding - 8, y);
+  });
+
+  // Draw column labels (top)
+  ctx.textAlign = "center";
+  ctx.save();
+  tickers.forEach((ticker, j) => {
+    const x = padding + j * cellSize + cellSize / 2;
+    ctx.translate(x, padding - 8);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillText(ticker, 0, 0);
+    ctx.restore();
+    ctx.save();
+  });
+  ctx.restore();
+
+  // Draw title
+  ctx.fillStyle = "#1C1B17";
+  ctx.font = "12px Inter";
+  ctx.textAlign = "center";
+  ctx.fillText("60D RETURN CORRELATION MATRIX", width / 2, 20);
+
+  // Draw legend
+  const legendY = height - 20;
+  const legendX = padding;
+  const legendWidth = 200;
+
+  ctx.fillStyle = "#5A574C";
+  ctx.font = "9px Inter";
+  ctx.textAlign = "left";
+  ctx.fillText("Correlation:", legendX, legendY);
+
+  // Legend gradient
+  for (let i = 0; i < 100; i++) {
+    const corr = (i / 100) * 2 - 1; // -1 to 1
+    let r, g, b;
+    if (corr >= 0) {
+      r = Math.round(255 * (1 - corr * 0.6));
+      g = Math.round(255 * (0.4 + corr * 0.6));
+      b = Math.round(255 * (1 - corr * 0.4));
+    } else {
+      r = Math.round(255 * (0.4 - corr * 0.6));
+      g = Math.round(255 * (1 + corr * 0.4));
+      b = Math.round(255 * (1 + corr * 0.4));
+    }
+    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+    ctx.fillRect(legendX + 80 + i * 1.2, legendY - 12, 1.2, 12);
+  }
+
+  ctx.fillStyle = "#5A574C";
+  ctx.font = "8px Inter";
+  ctx.textAlign = "center";
+  ctx.fillText("-1.0", legendX + 80, legendY + 8);
+  ctx.fillText("0.0", legendX + 80 + 60, legendY + 8);
+  ctx.fillText("+1.0", legendX + 80 + 120, legendY + 8);
+}

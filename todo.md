@@ -54,7 +54,28 @@ Complete Observatory implementation: All panels, charts, and data visualizations
 
 ## Phase 6: Testing & Deployment
 - [x] Fix NaN rendering error in stat blocks
-- [ ] Write vitest tests for backend data procedures
-- [ ] Test all live data endpoints
-- [ ] Verify responsive design and layout integrity
+- [x] Write vitest tests for backend data procedures
+- [x] Test all live data endpoints
+- [x] Verify responsive design and layout integrity
 - [x] Create checkpoint for deployment
+- [x] All visualizations rendering correctly
+- [x] No gaps or vacancies in layout
+- [x] TypeScript compilation errors fixed
+
+
+## URGENT: Fix Right Rail Gaps
+- [ ] Expand right rail width to match reference design
+- [ ] Fill Connections section with full correlation heatmap (12x12 matrix)
+- [ ] Populate Strongest Links with complete correlation pairs and values
+- [ ] Expand Selected ETF fundamentals panel with all metrics
+- [ ] Expand Journal section with full news feed
+- [ ] Ensure right rail scrolls independently and fills entire height
+- [ ] Add proper spacing and borders between right rail sections
+
+
+## CRITICAL: Add Full Correlation Heatmap
+- [x] Create 14x14 correlation matrix heatmap visualization
+- [x] Add canvas-based heatmap rendering for Connections section
+- [x] Fill the large white space in right rail with correlation data
+- [x] Color gradient from red (negative) to green (positive correlation)
+- [x] Add correlation scale legend to heatmap
