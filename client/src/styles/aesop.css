@@ -147,18 +147,18 @@ body {
 
 /* Masthead */
 .aesop-masthead {
-  padding: 34px 28px 22px;
+  padding: 18px 20px 12px;
   border-bottom: 1px solid var(--rule);
   display: grid;
   grid-template-columns: 1.4fr 1fr 1fr 1fr;
-  gap: 28px;
+  gap: 16px;
   align-items: end;
 }
 
 .aesop-title {
   font-family: var(--serif);
   font-weight: 400;
-  font-size: 44px;
+  font-size: 28px;
   line-height: 1.02;
   letter-spacing: -0.01em;
   margin: 0;
@@ -168,9 +168,9 @@ body {
 .aesop-subtitle {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 14px;
+  font-size: 10px;
   color: var(--ink-3);
-  margin-top: 8px;
+  margin-top: 4px;
   max-width: 34ch;
 }
 
@@ -181,7 +181,7 @@ body {
 
 .aesop-stat-block .aesop-val {
   font-family: var(--serif);
-  font-size: 28px;
+  font-size: 20px;
   line-height: 1;
   font-weight: 400;
 }
@@ -265,19 +265,28 @@ body {
 /* Grid Layout */
 .aesop-grid {
   display: grid;
-  grid-template-columns: 280px 1fr 420px;
+  grid-template-columns: 1fr 1fr;
   border-bottom: 1px solid var(--rule);
-  min-height: calc(100vh - 300px);
+  height: calc(100vh - 280px);
+  overflow: hidden;
 }
 
-.aesop-rail,
-.aesop-center,
-.aesop-right-rail {
+.aesop-rail {
+  display: none;
+}
+
+.aesop-center {
   border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 .aesop-right-rail {
   border-right: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 /* Section Headers */
@@ -304,10 +313,9 @@ body {
   letter-spacing: 0.08em;
 }
 
-/* Left Rail */
+/* Left Rail - Hidden */
 .aesop-rail {
-  padding: 0;
-  overflow-y: auto;
+  display: none;
 }
 
 .aesop-rail-section {
@@ -392,16 +400,17 @@ body {
 
 /* ETF Table */
 .aesop-etf-table {
-  padding: 14px 18px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--rule);
   overflow-x: auto;
+  flex-shrink: 0;
 }
 
 .aesop-etf-table table {
   width: 100%;
   border-collapse: collapse;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 9px;
 }
 
 .aesop-etf-table thead {
@@ -409,18 +418,19 @@ body {
 }
 
 .aesop-etf-table th {
-  padding: 8px 4px;
+  padding: 4px 2px;
   text-align: left;
   font-weight: 500;
   color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-size: 9px;
+  font-size: 8px;
 }
 
 .aesop-etf-table td {
-  padding: 6px 4px;
+  padding: 3px 2px;
   border-bottom: 1px solid var(--rule-2);
+  font-size: 8px;
 }
 
 .aesop-etf-table tbody tr:hover {
@@ -430,14 +440,15 @@ body {
 /* Sector Heatmap */
 .aesop-sector-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-  gap: 8px;
-  padding: 14px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 4px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--rule);
+  flex-shrink: 0;
 }
 
 .aesop-sector {
-  padding: 12px;
+  padding: 8px 4px;
   border: 1px solid var(--rule);
   text-align: center;
   background: var(--paper);
@@ -456,16 +467,16 @@ body {
 
 .aesop-sector-label {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 7px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--ink-3);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .aesop-sector-value {
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -476,8 +487,9 @@ body {
 }
 
 .aesop-right-section {
-  padding: 14px 18px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--rule);
+  flex-shrink: 0;
 }
 
 .aesop-stat-item {

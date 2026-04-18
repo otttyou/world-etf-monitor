@@ -79,3 +79,14 @@ Complete Observatory implementation: All panels, charts, and data visualizations
 - [x] Fill the large white space in right rail with correlation data
 - [x] Color gradient from red (negative) to green (positive correlation)
 - [x] Add correlation scale legend to heatmap
+
+
+## CRITICAL: Redesign Layout for Single-Page Glance
+- [ ] Reduce grid from 3 columns to 2 columns (left/right balanced)
+- [ ] Make all content fit in viewport without scrolling
+- [ ] Compact masthead and stat blocks
+- [ ] Reorganize center column: ETF table + sector grid side-by-side
+- [ ] Move charts to bottom in 2-column grid layout
+- [ ] Reduce right rail width, make it scrollable internally only
+- [ ] Optimize font sizes and padding throughout
+- [ ] Test on 1920px, 1440px, and 1024px widths
