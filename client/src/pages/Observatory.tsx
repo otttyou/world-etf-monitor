@@ -157,15 +157,15 @@ export default function Observatory() {
         ).toFixed(2)
       : "0.00";
 
-  const liquidity =
-    etfs.length > 0
-      ? (
-          etfs.reduce((sum, e) => {
-            const price = parseFloat(e.price || "0");
-            return sum + price;
-          }, 0) / etfs.length
-        ).toFixed(0)
-      : "0";
+  const liquidity = (() => {
+    if (etfs.length === 0) return "0";
+    const sum = etfs.reduce((acc, e) => {
+      const price = parseFloat(e.price || "0");
+      return acc + (isNaN(price) ? 0 : price);
+    }, 0);
+    const avg = sum / etfs.length;
+    return isNaN(avg) ? "0" : avg.toFixed(0);
+  })();
 
   return (
     <div className="aesop-frame">
@@ -204,19 +204,19 @@ export default function Observatory() {
         </div>
         <div className="aesop-stat-block">
           <span className="aesop-caps">Composite Breadth</span>
-          <div className="aesop-val">{breadthPct}</div>
+          <div className="aesop-val">{isNaN(breadthPct) ? "—" : breadthPct}</div>
           <span className="aesop-sfx">/ 100 advancers</span>
           <div className="aesop-foot">Δ +4 vs. prev. session · 10 issues</div>
         </div>
         <div className="aesop-stat-block">
           <span className="aesop-caps">Global Dispersion</span>
-          <div className="aesop-val">{dispersion}</div>
+          <div className="aesop-val">{isNaN(parseFloat(dispersion)) ? "—" : dispersion}</div>
           <span className="aesop-sfx">σ regional</span>
           <div className="aesop-foot">Low regime · 25d avg 1.61</div>
         </div>
         <div className="aesop-stat-block">
           <span className="aesop-caps">Liquidity Pulse</span>
-          <div className="aesop-val">${liquidity}</div>
+          <div className="aesop-val">${liquidity || "—"}</div>
           <span className="aesop-sfx">B ADV</span>
           <div className="aesop-foot">+12.4% wow · 1y percentile 71</div>
         </div>
