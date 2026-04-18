@@ -25,4 +25,48 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+export const etfPrices = mysqlTable("etf_prices", {
+  id: int("id").autoincrement().primaryKey(),
+  ticker: varchar("ticker", { length: 10 }).notNull().unique(),
+  name: text("name"),
+  price: varchar("price", { length: 20 }),
+  d1: varchar("d1", { length: 20 }), // 1-day change %
+  d5: varchar("d5", { length: 20 }), // 5-day change %
+  ytd: varchar("ytd", { length: 20 }), // YTD change %
+  aum: varchar("aum", { length: 20 }), // Assets under management
+  pe: varchar("pe", { length: 20 }), // P/E ratio
+  yld: varchar("yld", { length: 20 }), // Yield
+  signal: varchar("signal", { length: 20 }), // Bullish/Bearish/Neutral
+  rsi: int("rsi"), // RSI indicator
+  vol: varchar("vol", { length: 20 }), // Volatility
+  lastUpdated: timestamp("lastUpdated").defaultNow().onUpdateNow().notNull(),
+});
+
+export const regionalIndices = mysqlTable("regional_indices", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 10 }).notNull().unique(), // e.g., "US", "JP", "CN"
+  name: varchar("name", { length: 100 }).notNull(),
+  d1: varchar("d1", { length: 20 }),
+  region: varchar("region", { length: 20 }), // "DM", "EM", "AGG"
+  lastUpdated: timestamp("lastUpdated").defaultNow().onUpdateNow().notNull(),
+});
+
+export const fxRates = mysqlTable("fx_rates", {
+  id: int("id").autoincrement().primaryKey(),
+  pair: varchar("pair", { length: 20 }).notNull().unique(), // e.g., "EUR/USD"
+  rate: varchar("rate", { length: 20 }),
+  d1: varchar("d1", { length: 20 }),
+  lastUpdated: timestamp("lastUpdated").defaultNow().onUpdateNow().notNull(),
+});
+
+export const sectorData = mysqlTable("sector_data", {
+  id: int("id").autoincrement().primaryKey(),
+  sector: varchar("sector", { length: 20 }).notNull().unique(), // TECH, COMM, etc.
+  value: varchar("value", { length: 20 }),
+  lastUpdated: timestamp("lastUpdated").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ETFPrice = typeof etfPrices.$inferSelect;
+export type RegionalIndex = typeof regionalIndices.$inferSelect;
+export type FXRate = typeof fxRates.$inferSelect;
+export type SectorData = typeof sectorData.$inferSelect;

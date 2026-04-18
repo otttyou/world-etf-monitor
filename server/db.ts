@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, etfPrices, regionalIndices, fxRates, sectorData } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,123 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// ETF Price helpers
+export async function getAllETFPrices() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(etfPrices);
+}
+
+export async function getETFPrice(ticker: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(etfPrices).where(eq(etfPrices.ticker, ticker)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function upsertETFPrice(data: {
+  ticker: string;
+  name?: string;
+  price?: string;
+  d1?: string;
+  d5?: string;
+  ytd?: string;
+  aum?: string;
+  pe?: string;
+  yld?: string;
+  signal?: string;
+  rsi?: number;
+  vol?: string;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  
+  await db.insert(etfPrices).values(data).onDuplicateKeyUpdate({
+    set: {
+      name: data.name,
+      price: data.price,
+      d1: data.d1,
+      d5: data.d5,
+      ytd: data.ytd,
+      aum: data.aum,
+      pe: data.pe,
+      yld: data.yld,
+      signal: data.signal,
+      rsi: data.rsi,
+      vol: data.vol,
+      lastUpdated: new Date(),
+    },
+  });
+}
+
+// Regional Index helpers
+export async function getAllRegionalIndices() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(regionalIndices);
+}
+
+export async function upsertRegionalIndex(data: {
+  code: string;
+  name: string;
+  d1?: string;
+  region: string;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  
+  await db.insert(regionalIndices).values(data).onDuplicateKeyUpdate({
+    set: {
+      name: data.name,
+      d1: data.d1,
+      region: data.region,
+      lastUpdated: new Date(),
+    },
+  });
+}
+
+// FX Rate helpers
+export async function getAllFXRates() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(fxRates);
+}
+
+export async function upsertFXRate(data: {
+  pair: string;
+  rate?: string;
+  d1?: string;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  
+  await db.insert(fxRates).values(data).onDuplicateKeyUpdate({
+    set: {
+      rate: data.rate,
+      d1: data.d1,
+      lastUpdated: new Date(),
+    },
+  });
+}
+
+// Sector Data helpers
+export async function getAllSectorData() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(sectorData);
+}
+
+export async function upsertSectorData(data: {
+  sector: string;
+  value?: string;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  
+  await db.insert(sectorData).values(data).onDuplicateKeyUpdate({
+    set: {
+      value: data.value,
+      lastUpdated: new Date(),
+    },
+  });
+}
