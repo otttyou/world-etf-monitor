@@ -1,12 +1,35 @@
 import { useState, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
+import {
+  drawRadarChart,
+  drawEquirectangularMap,
+  drawExchangeOrbit,
+  drawVolatilityMoon,
+  drawSectorRose,
+  drawChladniPlate,
+  drawLiquidityDepth,
+  drawVolatilityCurve,
+  type RadarData,
+  type CountryNode,
+  type ExchangeMarker,
+} from "@/lib/chartUtils";
 import "@/styles/aesop.css";
 
 export default function Observatory() {
+  const [activeTab, setActiveTab] = useState("I");
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [isLive, setIsLive] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [selectedETF, setSelectedETF] = useState("EEM");
+
+  // Canvas refs
+  const radarCanvasRef = useRef<HTMLCanvasElement>(null);
+  const mapCanvasRef = useRef<HTMLCanvasElement>(null);
+  const orbitCanvasRef = useRef<HTMLCanvasElement>(null);
+  const moonCanvasRef = useRef<HTMLCanvasElement>(null);
+  const roseCanvasRef = useRef<HTMLCanvasElement>(null);
+  const chladniCanvasRef = useRef<HTMLCanvasElement>(null);
+  const liquidityCanvasRef = useRef<HTMLCanvasElement>(null);
+  const volatilityCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Fetch market data
   const etfPrices = trpc.market.etfPrices.useQuery();
@@ -14,7 +37,7 @@ export default function Observatory() {
   const fxRates = trpc.market.fxRates.useQuery();
   const sectorData = trpc.market.sectorData.useQuery();
 
-  // Refresh mutations with callbacks
+  // Refresh mutations
   const refreshETF = trpc.market.refreshETFData.useMutation({
     onMutate: () => setIsRefreshing(true),
     onSettled: () => setIsRefreshing(false),
@@ -45,7 +68,6 @@ export default function Observatory() {
           refreshFX.mutateAsync(),
           refreshSector.mutateAsync(),
         ]);
-        // Invalidate queries to force UI update
         await utils.market.etfPrices.invalidate();
         await utils.market.regionalIndices.invalidate();
         await utils.market.fxRates.invalidate();
@@ -61,46 +83,121 @@ export default function Observatory() {
     return () => clearInterval(interval);
   }, [utils]);
 
-  // Draw Chladni correlation plate
+  // Draw all charts when data updates
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!radarCanvasRef.current) return;
 
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const currentData: RadarData = {
+      growth: 0.62,
+      inflation: -0.15,
+      rates: -0.28,
+      credit: 0.44,
+      usd: 0.31,
+      oil: 0.52,
+    };
 
-    const width = canvas.width;
-    const height = canvas.height;
+    const priorData: RadarData = {
+      growth: 0.44,
+      inflation: -0.08,
+      rates: -0.14,
+      credit: 0.22,
+      usd: 0.18,
+      oil: 0.38,
+    };
 
-    // Clear canvas
-    ctx.fillStyle = "#EAE3D2";
-    ctx.fillRect(0, 0, width, height);
+    drawRadarChart(radarCanvasRef.current, currentData, priorData);
+  }, []);
 
-    // Draw correlation pattern (Chladni plate simulation)
-    const imageData = ctx.createImageData(width, height);
-    const data = imageData.data;
+  // Draw map
+  useEffect(() => {
+    if (!mapCanvasRef.current || !regionalIndices.data) return;
 
-    for (let i = 0; i < width; i++) {
-      for (let j = 0; j < height; j++) {
-        const x = (i / width) * 4 - 2;
-        const y = (j / height) * 4 - 2;
+    const countries: CountryNode[] = regionalIndices.data.map((r) => ({
+      code: r.code || "XX",
+      name: r.name || "Unknown",
+      lat: getCountryLat(r.code || ""),
+      lng: getCountryLng(r.code || ""),
+      change: parseFloat(r.d1 || "0"),
+    }));
 
-        // Chladni plate equation simulation
-        const value =
-          Math.sin(x * Math.PI) * Math.sin(y * Math.PI) +
-          0.5 * Math.sin(2 * x * Math.PI) * Math.sin(2 * y * Math.PI);
+    drawEquirectangularMap(mapCanvasRef.current, countries);
+  }, [regionalIndices.data]);
 
-        const brightness = Math.abs(value) * 255;
-        const idx = (j * width + i) * 4;
+  // Draw exchange orbit
+  useEffect(() => {
+    if (!orbitCanvasRef.current) return;
 
-        data[idx] = brightness * 0.8;
-        data[idx + 1] = brightness * 0.75;
-        data[idx + 2] = brightness * 0.7;
-        data[idx + 3] = 255;
-      }
-    }
+    const exchanges: ExchangeMarker[] = [
+      { code: "NYSE", hour: 14, isOpen: true },
+      { code: "NASD", hour: 14, isOpen: true },
+      { code: "TSX", hour: 14, isOpen: true },
+      { code: "B3", hour: 15, isOpen: true },
+      { code: "LSE", hour: 16, isOpen: false },
+      { code: "XETRA", hour: 16, isOpen: false },
+      { code: "SIX", hour: 16, isOpen: false },
+      { code: "JSE", hour: 8, isOpen: true },
+      { code: "DIFX", hour: 10, isOpen: true },
+      { code: "BSE", hour: 9, isOpen: true },
+      { code: "SGX", hour: 8, isOpen: true },
+      { code: "HKG", hour: 9, isOpen: true },
+      { code: "SSE", hour: 9, isOpen: true },
+      { code: "KRX", hour: 9, isOpen: true },
+    ];
 
-    ctx.putImageData(imageData, 0, 0);
+    drawExchangeOrbit(orbitCanvasRef.current, exchanges);
+  }, []);
+
+  // Draw volatility moon
+  useEffect(() => {
+    if (!moonCanvasRef.current) return;
+    drawVolatilityMoon(moonCanvasRef.current, 19.8, 94, 0.49, "first qtr");
+  }, []);
+
+  // Draw sector rose
+  useEffect(() => {
+    if (!roseCanvasRef.current || !sectorData.data) return;
+
+    const sectors = sectorData.data.map((s) => ({
+      name: s.sector || "Unknown",
+      value: parseFloat(s.value || "0"),
+    }));
+
+    drawSectorRose(roseCanvasRef.current, sectors);
+  }, [sectorData.data]);
+
+  // Draw Chladni plate
+  useEffect(() => {
+    if (!chladniCanvasRef.current || !etfPrices.data) return;
+
+    const etfNodes = etfPrices.data.map((etf, i) => ({
+      ticker: etf.ticker || "?",
+      x: 20 + (i % 4) * 25,
+      y: 20 + Math.floor(i / 4) * 30,
+      change: parseFloat(etf.d1 || "0"),
+    }));
+
+    drawChladniPlate(chladniCanvasRef.current, etfNodes);
+  }, [etfPrices.data]);
+
+  // Draw liquidity depth
+  useEffect(() => {
+    if (!liquidityCanvasRef.current) return;
+
+    const bids = [120, 150, 180, 200, 220, 250];
+    const asks = [210, 190, 160, 140, 110, 80];
+    const mid = 548.22;
+
+    drawLiquidityDepth(liquidityCanvasRef.current, bids, asks, mid);
+  }, []);
+
+  // Draw volatility curve
+  useEffect(() => {
+    if (!volatilityCanvasRef.current) return;
+
+    const current = [18, 17.5, 16, 15, 14.5, 14];
+    const prior = [16, 15.5, 15, 14.5, 14, 13.5];
+
+    drawVolatilityCurve(volatilityCanvasRef.current, current, prior);
   }, []);
 
   // Format helpers
@@ -144,8 +241,7 @@ export default function Observatory() {
     const d1 = parseFloat(e.d1 || "0");
     return d1 > 0;
   }).length;
-  const declCount = etfs.length - advCount;
-  const breadthPct = Math.round((advCount / etfs.length) * 100);
+  const breadthPct = etfs.length > 0 ? Math.round((advCount / etfs.length) * 100) : 0;
 
   const dispersion =
     etfs.length > 0
@@ -166,6 +262,34 @@ export default function Observatory() {
     const avg = sum / etfs.length;
     return isNaN(avg) ? "0" : avg.toFixed(0);
   })();
+
+  // Get selected ETF data
+  const selectedETFData = etfs.find((e) => e.ticker === selectedETF);
+
+  // News items
+  const newsItems = [
+    {
+      title: "Asia equity breadth widens",
+      content: "Nikkei +1.2%, Shanghai +0.8%, Hong Kong +0.4%",
+    },
+    {
+      title: "Fed speakers hawkish on rates",
+      content: "2Y yields +6bp, long-duration bonds drift lower",
+    },
+    {
+      title: "Gold consolidates near $2,100",
+      content: "Safe-haven demand steady amid geopolitical concerns",
+    },
+  ];
+
+  // Correlation matrix data (simulated)
+  const correlationPairs = [
+    { pair1: "SPY", pair2: "QQQ", corr: 0.94 },
+    { pair1: "EEM", pair2: "EWZ", corr: 0.87 },
+    { pair1: "EFA", pair2: "EWG", corr: 0.91 },
+    { pair1: "EWJ", pair2: "MCHI", corr: 0.62 },
+    { pair1: "TLT", pair2: "GLD", corr: 0.45 },
+  ];
 
   return (
     <div className="aesop-frame">
@@ -224,33 +348,16 @@ export default function Observatory() {
 
       {/* NAVIGATION */}
       <nav className="aesop-nav">
-        <button className="aesop-nav-link active">
-          <span className="aesop-idx">I.</span> OBSERVATORY
-        </button>
-        <button className="aesop-nav-link">
-          <span className="aesop-idx">II.</span> REGIONS
-        </button>
-        <button className="aesop-nav-link">
-          <span className="aesop-idx">III.</span> SECTORS
-        </button>
-        <button className="aesop-nav-link">
-          <span className="aesop-idx">IV.</span> FACTORS
-        </button>
-        <button className="aesop-nav-link">
-          <span className="aesop-idx">V.</span> CORRELATION
-        </button>
-        <button className="aesop-nav-link">
-          <span className="aesop-idx">VI.</span> FUNDAMENTALS
-        </button>
-        <button className="aesop-nav-link">
-          <span className="aesop-idx">VII.</span> TECHNICALS
-        </button>
-        <button className="aesop-nav-link">
-          <span className="aesop-idx">VIII.</span> FLOWS
-        </button>
-        <button className="aesop-nav-link">
-          <span className="aesop-idx">IX.</span> JOURNAL
-        </button>
+        {["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"].map((tab, i) => (
+          <button
+            key={tab}
+            className={`aesop-nav-link ${activeTab === tab ? "active" : ""}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            <span className="aesop-idx">{tab}.</span>{" "}
+            {["OBSERVATORY", "REGIONS", "SECTORS", "FACTORS", "CORRELATION", "FUNDAMENTALS", "TECHNICALS", "FLOWS", "JOURNAL"][i]}
+          </button>
+        ))}
         <div className="aesop-nav-spacer"></div>
         <div className="aesop-nav-tools">
           <span>⚙ TWEAKS</span>
@@ -280,6 +387,7 @@ export default function Observatory() {
                       <div className="aesop-region-name">
                         <em>{r.name}</em>
                       </div>
+                      <div className="aesop-region-sparkline">▁▂▃▂▃▄▃▂▃</div>
                     </div>
                     <div className={`aesop-region-delta ${getPercentClass(r.d1 || undefined)}`}>
                       {formatPercent(r.d1 || undefined)}
@@ -306,6 +414,7 @@ export default function Observatory() {
                       <div className="aesop-region-name">
                         <em>{r.name}</em>
                       </div>
+                      <div className="aesop-region-sparkline">▁▂▃▂▃▄▃▂▃</div>
                     </div>
                     <div className={`aesop-region-delta ${getPercentClass(r.d1 || undefined)}`}>
                       {formatPercent(r.d1 || undefined)}
@@ -332,6 +441,7 @@ export default function Observatory() {
                       <div className="aesop-region-name">
                         <em>{r.pair}</em>
                       </div>
+                      <div className="aesop-region-sparkline">▁▂▃▂▃▄▃▂▃</div>
                     </div>
                     <div className={`aesop-region-delta ${getPercentClass(r.d1 || undefined)}`}>
                       {formatPercent(r.d1 || undefined)}
@@ -349,27 +459,64 @@ export default function Observatory() {
 
         {/* CENTER COLUMN */}
         <main className="aesop-center">
-          {/* GEOGRAPHIC MONITOR */}
+          {/* II. GEOGRAPHIC MONITOR */}
           <div className="aesop-shead">
             <span className="aesop-shead-title">
               <span className="roman">II.</span> <em>Earth — geographic monitor</em>
             </span>
             <span className="aesop-shead-idx">EQUIRECTANGULAR · 1D Δ · {formatTime(new Date())}</span>
           </div>
-          <div style={{ padding: "14px 18px", background: "#F5F3ED", minHeight: "200px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", fontSize: "12px" }}>
-            [Geographic Earth Monitor - Equirectangular map with color-coded country nodes]
+          <div style={{ padding: "14px 18px", background: "#F5F3ED", borderBottom: "1px solid var(--rule)" }}>
+            <canvas
+              ref={mapCanvasRef}
+              width={800}
+              height={250}
+              style={{ width: "100%", height: "auto", border: "1px solid var(--rule)" }}
+            ></canvas>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px", marginTop: "14px", fontSize: "11px" }}>
+              <div>
+                <div style={{ fontWeight: 500, marginBottom: "4px" }}>Sun Over</div>
+                <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>
+                  <em>Karachi, PK</em>
+                </div>
+                <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>Longitude 67.0°E · 09:17 local</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 500, marginBottom: "4px" }}>Open Exchanges</div>
+                <div style={{ fontSize: "14px", fontFamily: "var(--serif)" }}>14 / 47</div>
+                <div style={{ fontSize: "9px", color: "var(--ink-3)" }}>TYO · SHA · HKG · BSE · DIFX · JSE · IST</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 500, marginBottom: "4px" }}>Storm Watch</div>
+                <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>
+                  <em>Taiwan Strait</em>
+                </div>
+                <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>FXI σ 2.7× · EWT σ 2.1×</div>
+              </div>
+            </div>
+            <div style={{ marginTop: "14px", fontSize: "11px" }}>
+              <div style={{ fontWeight: 500, marginBottom: "4px" }}>Quiet Waters</div>
+              <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>
+                <em>Scandinavia</em> · EWD / ENOR / EFNL · σ &lt; 0.6×
+              </div>
+            </div>
           </div>
 
-          {/* RADAR CHART */}
+          {/* III. RADAR CHART */}
           <div className="aesop-shead">
             <span className="aesop-shead-title">
               <span className="roman">III.</span> <em>Radar — regime &amp; style</em>
             </span>
             <span className="aesop-shead-idx">6-AXIS · Z-SCORED · 60D</span>
           </div>
-          <div style={{ padding: "14px 18px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <div style={{ background: "#F5F3ED", minHeight: "200px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", fontSize: "12px" }}>
-              [Radar Chart - GROWTH, INFLATION, RATES, CREDIT, USD, OIL]
+          <div style={{ padding: "14px 18px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", borderBottom: "1px solid var(--rule)" }}>
+            <div>
+              <canvas
+                ref={radarCanvasRef}
+                width={350}
+                height={300}
+                style={{ width: "100%", height: "auto", border: "1px solid var(--rule)" }}
+              ></canvas>
             </div>
             <div>
               <h4 style={{ fontFamily: "var(--serif)", fontSize: "16px", marginTop: 0 }}>A mild risk-on, short-duration regime.</h4>
@@ -387,11 +534,21 @@ export default function Observatory() {
                   <div style={{ fontSize: "14px", fontFamily: "var(--serif)" }}>Short</div>
                   <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>2s10s −14bp · 30d</div>
                 </div>
+                <div>
+                  <div style={{ fontWeight: 500, color: "var(--ink)" }}>Breadth</div>
+                  <div style={{ fontSize: "14px", fontFamily: "var(--serif)" }}>Widening</div>
+                  <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>62% above 50DMA</div>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 500, color: "var(--ink)" }}>Volatility</div>
+                  <div style={{ fontSize: "14px", fontFamily: "var(--serif)" }}>Subdued</div>
+                  <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>VIX 13.2 · MOVE 72</div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* SECTORS */}
+          {/* IV. SECTORS */}
           <div className="aesop-shead">
             <span className="aesop-shead-title">
               <span className="roman">IV.</span> <em>Sectors — 1D performance</em>
@@ -413,7 +570,7 @@ export default function Observatory() {
             )}
           </div>
 
-          {/* ETF TABLE */}
+          {/* V. ETF TABLE */}
           <div className="aesop-shead">
             <span className="aesop-shead-title">
               <span className="roman">V.</span> <em>Issues — fundamentals &amp; technicals</em>
@@ -429,17 +586,19 @@ export default function Observatory() {
                   <th>1D</th>
                   <th>5D</th>
                   <th>YTD</th>
+                  <th>Trend 20D</th>
                   <th>AUM</th>
                   <th>P/E</th>
                   <th>Yield</th>
                   <th>RSI</th>
+                  <th>200D</th>
                   <th>Signal</th>
                 </tr>
               </thead>
               <tbody>
                 {etfs.length > 0 ? (
                   etfs.map((etf, i) => (
-                    <tr key={i}>
+                    <tr key={i} onClick={() => setSelectedETF(etf.ticker || "")}>
                       <td className="aesop-mono">{etf.ticker}</td>
                       <td className="aesop-mono">{etf.price || "—"}</td>
                       <td className={`aesop-mono ${getPercentClass(etf.d1 || undefined)}`}>
@@ -451,16 +610,24 @@ export default function Observatory() {
                       <td className={`aesop-mono ${getPercentClass(etf.ytd || undefined)}`}>
                         {formatPercent(etf.ytd || undefined)}
                       </td>
+                      <td className="aesop-mono" style={{ fontSize: "10px" }}>▁▂▃▂▃▄▃▂▃</td>
                       <td className="aesop-mono">{etf.aum || "—"}</td>
                       <td className="aesop-mono">{etf.pe || "—"}</td>
                       <td className="aesop-mono">{etf.yld || "—"}</td>
                       <td className="aesop-mono">{etf.rsi || "—"}</td>
-                      <td className="aesop-mono">{etf.signal || "—"}</td>
+                      <td className={`aesop-mono ${getPercentClass(etf.d1 ? parseFloat(etf.d1) * 5 : undefined)}`}>
+                        {etf.d1 ? "+" + (parseFloat(etf.d1) * 5).toFixed(1) + "%" : "—"}
+                      </td>
+                      <td className="aesop-mono">
+                        <button style={{ fontSize: "9px", padding: "2px 6px", cursor: "pointer" }}>
+                          {parseFloat(etf.d1 || "0") > 0 ? "BULL" : "BEAR"}
+                        </button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={10} className="aesop-mono" style={{ textAlign: "center", padding: "20px" }}>
+                    <td colSpan={12} className="aesop-mono" style={{ textAlign: "center", padding: "20px" }}>
                       {isRefreshing ? "Loading data..." : "No data available"}
                     </td>
                   </tr>
@@ -469,7 +636,7 @@ export default function Observatory() {
             </table>
           </div>
 
-          {/* EXOTIC STRIP */}
+          {/* VI. INSTRUMENTS - THREE CHARTS */}
           <div className="aesop-shead">
             <span className="aesop-shead-title">
               <span className="roman">VI.</span> <em>Instruments — orbit, phase, rose</em>
@@ -477,14 +644,32 @@ export default function Observatory() {
             <span className="aesop-shead-idx">EXCHANGE CLOCK · VOL PHASE · SECTOR ROSE</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px", padding: "14px 18px", borderBottom: "1px solid var(--rule)" }}>
-            <div style={{ background: "#F5F3ED", minHeight: "150px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", fontSize: "11px" }}>
-              [Exchange Orbit - 24H UTC]
+            <div>
+              <div style={{ fontSize: "10px", color: "var(--ink-3)", marginBottom: "8px", fontWeight: 500 }}>Exchange Orbit · 24H UTC</div>
+              <canvas
+                ref={orbitCanvasRef}
+                width={250}
+                height={250}
+                style={{ width: "100%", height: "auto", border: "1px solid var(--rule)" }}
+              ></canvas>
             </div>
-            <div style={{ background: "#F5F3ED", minHeight: "150px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", fontSize: "11px" }}>
-              [Volatility Phase - VIX, MOVE, DXY]
+            <div>
+              <div style={{ fontSize: "10px", color: "var(--ink-3)", marginBottom: "8px", fontWeight: 500 }}>Volatility Phase · VIX, MOVE, DXY</div>
+              <canvas
+                ref={moonCanvasRef}
+                width={250}
+                height={250}
+                style={{ width: "100%", height: "auto", border: "1px solid var(--rule)" }}
+              ></canvas>
             </div>
-            <div style={{ background: "#F5F3ED", minHeight: "150px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", fontSize: "11px" }}>
-              [Sector Rose - Radial Chart]
+            <div>
+              <div style={{ fontSize: "10px", color: "var(--ink-3)", marginBottom: "8px", fontWeight: 500 }}>Sector Rose · 1D Radial</div>
+              <canvas
+                ref={roseCanvasRef}
+                width={250}
+                height={250}
+                style={{ width: "100%", height: "auto", border: "1px solid var(--rule)" }}
+              ></canvas>
             </div>
           </div>
 
@@ -493,7 +678,12 @@ export default function Observatory() {
             <div style={{ fontFamily: "var(--serif)", fontSize: "14px", fontStyle: "italic", marginBottom: "10px" }}>
               <em>Chladni plate — correlation resonance</em> <span style={{ fontSize: "10px", color: "var(--ink-3)", letterSpacing: "0.08em", textTransform: "uppercase" }}>NODAL FIGURES · 60D</span>
             </div>
-            <canvas id="chladniCanvas" ref={canvasRef} width={900} height={300} style={{ width: "100%", height: "auto", border: "1px solid var(--rule)" }}></canvas>
+            <canvas
+              ref={chladniCanvasRef}
+              width={900}
+              height={300}
+              style={{ width: "100%", height: "auto", border: "1px solid var(--rule)" }}
+            ></canvas>
             <div style={{ fontSize: "10px", color: "var(--ink-3)", marginTop: "8px", letterSpacing: "0.04em" }}>
               Bright ridges = uncorrelated axes · Nodes = ETFs plotted by 1st–2nd principal components
             </div>
@@ -504,8 +694,14 @@ export default function Observatory() {
             <div style={{ fontFamily: "var(--serif)", fontSize: "14px", fontStyle: "italic", marginBottom: "10px" }}>
               <em>Liquidity cathedral — bid/ask depth, SPY</em> <span style={{ fontSize: "10px", color: "var(--ink-3)", letterSpacing: "0.08em", textTransform: "uppercase" }}>AGGREGATE · 10BP BINS</span>
             </div>
-            <div style={{ background: "#F5F3ED", height: "100px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", fontSize: "11px" }}>
-              [Liquidity Depth Chart]
+            <canvas
+              ref={liquidityCanvasRef}
+              width={900}
+              height={150}
+              style={{ width: "100%", height: "auto", border: "1px solid var(--rule)" }}
+            ></canvas>
+            <div style={{ fontSize: "10px", color: "var(--ink-3)", marginTop: "8px" }}>
+              BIDS · $548.10 ←→ $548.34 · ASKs · mid · $548.22
             </div>
           </div>
 
@@ -516,105 +712,132 @@ export default function Observatory() {
             </span>
             <span className="aesop-shead-idx">IMPLIED · ACWI · 1M → 24M</span>
           </div>
-          <div style={{ padding: "14px 18px", background: "#F5F3ED", minHeight: "150px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", fontSize: "11px" }}>
-            [Volatility Term Structure Curve]
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--rule)" }}>
+            <canvas
+              ref={volatilityCanvasRef}
+              width={900}
+              height={200}
+              style={{ width: "100%", height: "auto", border: "1px solid var(--rule)" }}
+            ></canvas>
+            <div style={{ fontSize: "10px", color: "var(--ink-3)", marginTop: "8px" }}>
+              contango · +6.1 vol pts 1M→24M
+            </div>
           </div>
         </main>
 
         {/* RIGHT RAIL */}
         <aside className="aesop-right-rail">
+          {/* CORRELATION MATRIX */}
           <section className="aesop-right-section">
             <h3 style={{ fontFamily: "var(--serif)", fontSize: "16px", fontStyle: "italic", marginTop: 0 }}>
               Connections <span style={{ fontSize: "10px", color: "var(--ink-3)", fontStyle: "normal" }}>· VI.</span>
             </h3>
-            <div style={{ background: "#F5F3ED", minHeight: "120px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)", fontSize: "11px" }}>
-              [Correlation Matrix]
+            <div style={{ background: "#F5F3ED", padding: "12px", minHeight: "120px", border: "1px solid var(--rule)", marginBottom: "12px" }}>
+              <div style={{ fontSize: "10px", color: "var(--ink-3)", marginBottom: "8px" }}>60D RETURN CORRELATION · CLUSTERED</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "4px" }}>
+                {["SPY", "QQQ", "EFA", "EEM", "EWJ", "MCHI", "INDA", "EWZ", "EWG", "GLD", "TLT", "HYG"].map((ticker, i) => (
+                  <div
+                    key={ticker}
+                    style={{
+                      padding: "6px",
+                      background: "#EAE3D2",
+                      border: "1px solid var(--rule)",
+                      fontSize: "9px",
+                      fontWeight: 500,
+                      textAlign: "center",
+                    }}
+                  >
+                    {ticker}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={{ fontSize: "9px", color: "var(--ink-3)", marginTop: "10px", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+            <div style={{ fontSize: "9px", color: "var(--ink-3)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
               60D RETURN CORRELATION · CLUSTERED
             </div>
           </section>
 
+          {/* STRONGEST LINKS */}
           <section className="aesop-right-section">
             <h3 style={{ fontFamily: "var(--serif)", fontSize: "16px", fontStyle: "italic", marginTop: 0 }}>
               Strongest Links <span style={{ fontSize: "10px", color: "var(--ink-3)", fontStyle: "normal" }}>· VII.</span>
             </h3>
-            <div style={{ fontSize: "11px", lineHeight: "1.6" }}>
-              <div style={{ marginBottom: "8px" }}>
-                <div style={{ fontWeight: 500 }}>SPY ↔ QQQ</div>
-                <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>+0.94 correlation</div>
-              </div>
-              <div style={{ marginBottom: "8px" }}>
-                <div style={{ fontWeight: 500 }}>EEM ↔ EWZ</div>
-                <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>+0.87 correlation</div>
-              </div>
-              <div>
-                <div style={{ fontWeight: 500 }}>EFA ↔ EWG</div>
-                <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>+0.91 correlation</div>
-              </div>
+            <div style={{ fontSize: "11px", lineHeight: "1.8" }}>
+              {correlationPairs.map((pair, i) => (
+                <div key={i} style={{ marginBottom: "10px", paddingBottom: "10px", borderBottom: "1px solid var(--rule-2)" }}>
+                  <div style={{ fontWeight: 500 }}>
+                    {pair.pair1} ↔ {pair.pair2}
+                  </div>
+                  <div style={{ fontSize: "10px", color: "var(--ink-3)" }}>+{pair.corr.toFixed(2)} correlation</div>
+                </div>
+              ))}
             </div>
           </section>
 
+          {/* SELECTED ETF */}
           <section className="aesop-right-section">
             <h3 style={{ fontFamily: "var(--serif)", fontSize: "16px", fontStyle: "italic", marginTop: 0 }}>
-              Selected — EEM <span style={{ fontSize: "10px", color: "var(--ink-3)", fontStyle: "normal" }}>· VIII.</span>
+              Selected — {selectedETF} <span style={{ fontSize: "10px", color: "var(--ink-3)", fontStyle: "normal" }}>· VIII.</span>
             </h3>
-            <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: "14px", marginBottom: "10px" }}>
-              iShares MSCI Emerging Markets
-            </div>
-            <div style={{ fontSize: "11px", lineHeight: "1.8" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
-                <span style={{ color: "var(--ink-3)" }}>Last</span>
-                <span style={{ fontWeight: 500 }}>$48.21</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
-                <span style={{ color: "var(--ink-3)" }}>1D</span>
-                <span className="pos" style={{ fontWeight: 500 }}>+0.84%</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
-                <span style={{ color: "var(--ink-3)" }}>AUM</span>
-                <span style={{ fontWeight: 500 }}>$27.4B</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
-                <span style={{ color: "var(--ink-3)" }}>P/E</span>
-                <span style={{ fontWeight: 500 }}>12.4×</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
-                <span style={{ color: "var(--ink-3)" }}>Div Yield</span>
-                <span style={{ fontWeight: 500 }}>2.6%</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
-                <span style={{ color: "var(--ink-3)" }}>σ 30D</span>
-                <span style={{ fontWeight: 500 }}>14.2%</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
-                <span style={{ color: "var(--ink-3)" }}>RSI 14</span>
-                <span style={{ fontWeight: 500 }}>61</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "var(--ink-3)" }}>vs 200D</span>
-                <span className="pos" style={{ fontWeight: 500 }}>+6.4%</span>
-              </div>
-            </div>
+            {selectedETFData && (
+              <>
+                <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: "14px", marginBottom: "10px" }}>
+                  iShares {selectedETFData.ticker} Fund
+                </div>
+                <div style={{ fontSize: "11px", lineHeight: "1.8" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
+                    <span style={{ color: "var(--ink-3)" }}>Last</span>
+                    <span style={{ fontWeight: 500 }}>${selectedETFData.price || "—"}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
+                    <span style={{ color: "var(--ink-3)" }}>1D</span>
+                    <span className={getPercentClass(selectedETFData.d1)} style={{ fontWeight: 500 }}>
+                      {formatPercent(selectedETFData.d1)}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
+                    <span style={{ color: "var(--ink-3)" }}>AUM</span>
+                    <span style={{ fontWeight: 500 }}>{selectedETFData.aum || "—"}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
+                    <span style={{ color: "var(--ink-3)" }}>P/E</span>
+                    <span style={{ fontWeight: 500 }}>{selectedETFData.pe || "—"}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
+                    <span style={{ color: "var(--ink-3)" }}>Div Yield</span>
+                    <span style={{ fontWeight: 500 }}>{selectedETFData.yld || "—"}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
+                    <span style={{ color: "var(--ink-3)" }}>σ 30D</span>
+                    <span style={{ fontWeight: 500 }}>14.2%</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", paddingBottom: "6px", borderBottom: "1px solid var(--rule-2)" }}>
+                    <span style={{ color: "var(--ink-3)" }}>RSI 14</span>
+                    <span style={{ fontWeight: 500 }}>{selectedETFData.rsi || "—"}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--ink-3)" }}>vs 200D</span>
+                    <span className="pos" style={{ fontWeight: 500 }}>
+                      +{selectedETFData.d1 ? (parseFloat(selectedETFData.d1) * 5).toFixed(1) : "0"}%
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </section>
 
+          {/* NEWS JOURNAL */}
           <section className="aesop-right-section">
             <h3 style={{ fontFamily: "var(--serif)", fontSize: "16px", fontStyle: "italic", marginTop: 0 }}>
               Journal <span style={{ fontSize: "10px", color: "var(--ink-3)", fontStyle: "normal" }}>· IX.</span>
             </h3>
             <div style={{ fontSize: "11px", lineHeight: "1.6", color: "var(--ink-3)" }}>
-              <div style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px solid var(--rule-2)" }}>
-                <div style={{ fontWeight: 500, color: "var(--ink)", marginBottom: "4px" }}>Asia equity breadth widens</div>
-                <div style={{ fontSize: "10px" }}>Nikkei +1.2%, Shanghai +0.8%, Hong Kong +0.4%</div>
-              </div>
-              <div style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px solid var(--rule-2)" }}>
-                <div style={{ fontWeight: 500, color: "var(--ink)", marginBottom: "4px" }}>Fed speakers hawkish on rates</div>
-                <div style={{ fontSize: "10px" }}>2Y yields +6bp, long-duration bonds drift lower</div>
-              </div>
-              <div>
-                <div style={{ fontWeight: 500, color: "var(--ink)", marginBottom: "4px" }}>Gold consolidates near $2,100</div>
-                <div style={{ fontSize: "10px" }}>Safe-haven demand steady amid geopolitical concerns</div>
-              </div>
+              {newsItems.map((item, i) => (
+                <div key={i} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: i < newsItems.length - 1 ? "1px solid var(--rule-2)" : "none" }}>
+                  <div style={{ fontWeight: 500, color: "var(--ink)", marginBottom: "4px" }}>{item.title}</div>
+                  <div style={{ fontSize: "10px" }}>{item.content}</div>
+                </div>
+              ))}
             </div>
           </section>
         </aside>
@@ -625,19 +848,28 @@ export default function Observatory() {
         <span style={{ marginRight: "20px", color: "var(--ink-3)" }}>·</span>
         {[
           { ticker: "SPY", price: "549.06", change: "+0.46%" },
+          { ticker: "IVV", price: "549.78", change: "+0.30%" },
+          { ticker: "VTI", price: "284.11", change: "+0.28%" },
           { ticker: "QQQ", price: "495.64", change: "+1.08%" },
           { ticker: "IWM", price: "221.45", change: "-0.18%" },
           { ticker: "ACWI", price: "119.68", change: "+0.98%" },
           { ticker: "EFA", price: "82.48", change: "+0.67%" },
           { ticker: "EEM", price: "48.55", change: "+1.55%" },
+          { ticker: "VWO", price: "46.02", change: "+0.79%" },
           { ticker: "EWJ", price: "72.37", change: "+1.15%" },
           { ticker: "MCHI", price: "49.74", change: "-0.76%" },
           { ticker: "INDA", price: "53.81", change: "-0.20%" },
           { ticker: "EWZ", price: "31.89", change: "+1.91%" },
+          { ticker: "FXI", price: "29.14", change: "-0.71%" },
           { ticker: "EWG", price: "36.21", change: "+0.20%" },
           { ticker: "EWU", price: "38.99", change: "+0.40%" },
-          { ticker: "TLT", price: "89.34", change: "+0.03%" },
+          { ticker: "EWC", price: "44.06", change: "+0.22%" },
+          { ticker: "EWA", price: "27.60", change: "-0.08%" },
+          { ticker: "EZA", price: "42.91", change: "+1.01%" },
+          { ticker: "ILF", price: "26.73", change: "+1.28%" },
           { ticker: "GLD", price: "272.67", change: "+0.17%" },
+          { ticker: "TLT", price: "89.34", change: "+0.03%" },
+          { ticker: "HYG", price: "78.56", change: "+0.11%" },
         ].map((tick, i) => (
           <span key={i} style={{ marginRight: "28px", display: "inline-block" }}>
             <span style={{ fontWeight: 500 }}>{tick.ticker}</span> {tick.price}{" "}
@@ -649,3 +881,24 @@ export default function Observatory() {
     </div>
   );
 }
+
+// Helper functions for country coordinates
+function getCountryLat(code: string): number {
+  const coords: Record<string, number> = {
+    US: 37.1, CA: 56.1, UK: 55.4, DE: 51.2, FR: 46.2, JP: 36.2, AU: -25.3, CH: 46.8,
+    SE: 60.1, SG: 1.4, CN: 35.9, IN: 20.6, KR: 35.9, TW: 23.7, BR: -14.2, MX: 23.6,
+    ZA: -30.6, TR: 38.9, SA: 23.9, ID: -0.8,
+  };
+  return coords[code] || 0;
+}
+
+function getCountryLng(code: string): number {
+  const coords: Record<string, number> = {
+    US: -95.7, CA: -106.3, UK: -3.4, DE: 10.5, FR: 2.2, JP: 138.3, AU: 133.8, CH: 8.2,
+    SE: 18.6, SG: 103.8, CN: 104.2, IN: 78.9, KR: 127.8, TW: 120.9, BR: -51.9, MX: -102.6,
+    ZA: 22.9, TR: 35.2, SA: 45.1, ID: 113.9,
+  };
+  return coords[code] || 0;
+}
+
+const isLive = true;
