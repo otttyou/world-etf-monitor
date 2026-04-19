@@ -1,7 +1,41 @@
 /**
  * Chart utility functions for rendering all Observatory visualizations
+ * Aesop Warm Minimal design system — cream, ink, amber, sage, taupe palette
+ * All charts support HiDPI / Retina via setupHiDPI helper
  */
 
+// ─── Aesop Palette ────────────────────────────────────────────────────────────
+const C = {
+  cream:    "#F6F1EB",
+  paper:    "#EDE7DC",
+  offwhite: "#E8E2D6",
+  ink:      "#1A1916",
+  ink2:     "#2E2C26",
+  taupe:    "#8C7F6E",
+  amber:    "#B5864A",
+  sage:     "#6B7B6E",
+  rule:     "#D9D0C2",
+  rule2:    "#C8C0B0",
+  pos:      "#3A5C2A",   // deep forest green
+  neg:      "#7A2E1A",   // deep terra red
+  posLight: "rgba(58,92,42,0.12)",
+  negLight: "rgba(122,46,26,0.12)",
+  grid:     "rgba(217,208,194,0.6)",
+};
+
+// ─── HiDPI Setup ──────────────────────────────────────────────────────────────
+export function setupHiDPI(canvas: HTMLCanvasElement, w: number, h: number) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width  = `${w}px`;
+  canvas.style.height = `${h}px`;
+  const ctx = canvas.getContext("2d")!;
+  ctx.scale(dpr, dpr);
+  return { ctx, w, h, dpr };
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 export interface RadarData {
   growth: number;
   inflation: number;
@@ -21,266 +55,307 @@ export interface CountryNode {
 
 export interface ExchangeMarker {
   code: string;
-  hour: number; // 0-24
+  hour: number;
   isOpen: boolean;
 }
 
-// Draw radar chart on canvas
+// ─── Radar Chart ──────────────────────────────────────────────────────────────
 export function drawRadarChart(
   canvas: HTMLCanvasElement,
   currentData: RadarData,
   priorData: RadarData
 ) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  const W = 340, H = 300;
+  const { ctx, w, h } = setupHiDPI(canvas, W, H);
+  const cx = w / 2, cy = h / 2 - 10;
+  const radius = Math.min(w, h) / 2 - 52;
 
-  const width = canvas.width;
-  const height = canvas.height;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = Math.min(width, height) / 2 - 40;
-
-  ctx.fillStyle = "#EAE3D2";
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = C.paper;
+  ctx.fillRect(0, 0, w, h);
 
   const axes = ["GROWTH", "INFLATION", "RATES", "CREDIT", "USD", "OIL"];
-  const angleSlice = (Math.PI * 2) / axes.length;
+  const slice = (Math.PI * 2) / axes.length;
 
-  // Draw grid circles
-  ctx.strokeStyle = "#D4CEC1";
-  ctx.lineWidth = 1;
+  // Grid rings
   for (let i = 1; i <= 5; i++) {
     const r = (radius / 5) * i;
     ctx.beginPath();
-    ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = i === 5 ? C.rule2 : C.grid;
+    ctx.lineWidth = i === 5 ? 1 : 0.5;
     ctx.stroke();
   }
 
-  // Draw axes
-  ctx.strokeStyle = "#A89F92";
-  ctx.lineWidth = 1;
-  axes.forEach((_, i) => {
-    const angle = angleSlice * i - Math.PI / 2;
-    const x = centerX + radius * Math.cos(angle);
-    const y = centerY + radius * Math.sin(angle);
+  // Axis spokes
+  axes.forEach((label, i) => {
+    const angle = slice * i - Math.PI / 2;
+    const x = cx + radius * Math.cos(angle);
+    const y = cy + radius * Math.sin(angle);
     ctx.beginPath();
-    ctx.moveTo(centerX, centerY);
+    ctx.moveTo(cx, cy);
     ctx.lineTo(x, y);
+    ctx.strokeStyle = C.rule2;
+    ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Draw axis labels
-    ctx.fillStyle = "#4A4A4A";
-    ctx.font = "11px Inter";
+    // Labels
+    const lx = cx + (radius + 22) * Math.cos(angle);
+    const ly = cy + (radius + 22) * Math.sin(angle);
+    ctx.fillStyle = C.taupe;
+    ctx.font = "500 9px 'DM Sans', Inter, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(axes[i], x * 1.15, y * 1.15);
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, lx, ly);
   });
 
-  // Draw current data polygon (solid)
-  const currentValues = [
-    currentData.growth,
-    currentData.inflation,
-    currentData.rates,
-    currentData.credit,
-    currentData.usd,
-    currentData.oil,
-  ];
+  const drawPolygon = (values: number[], color: string, fill: string, dash: number[]) => {
+    ctx.beginPath();
+    ctx.setLineDash(dash);
+    values.forEach((v, i) => {
+      const angle = slice * i - Math.PI / 2;
+      const r = (radius / 5) * Math.max(0, Math.min(5, (v + 1) * 2.5));
+      const x = cx + r * Math.cos(angle);
+      const y = cy + r * Math.sin(angle);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
 
-  ctx.strokeStyle = "#2D5016";
-  ctx.fillStyle = "rgba(45, 80, 22, 0.1)";
-  ctx.lineWidth = 2;
+  const priorVals = [priorData.growth, priorData.inflation, priorData.rates, priorData.credit, priorData.usd, priorData.oil];
+  const currVals  = [currentData.growth, currentData.inflation, currentData.rates, currentData.credit, currentData.usd, currentData.oil];
+
+  drawPolygon(priorVals, C.taupe, "rgba(140,127,110,0.08)", [4, 3]);
+  drawPolygon(currVals, C.pos, C.posLight, []);
+
+  // Center dot
   ctx.beginPath();
-  currentValues.forEach((value, i) => {
-    const angle = angleSlice * i - Math.PI / 2;
-    const r = (radius / 5) * Math.max(0, Math.min(5, value));
-    const x = centerX + r * Math.cos(angle);
-    const y = centerY + r * Math.sin(angle);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.closePath();
+  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.fillStyle = C.amber;
   ctx.fill();
-  ctx.stroke();
 
-  // Draw prior data polygon (dashed)
-  const priorValues = [
-    priorData.growth,
-    priorData.inflation,
-    priorData.rates,
-    priorData.credit,
-    priorData.usd,
-    priorData.oil,
-  ];
-
-  ctx.strokeStyle = "#A89F92";
-  ctx.setLineDash([4, 4]);
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  priorValues.forEach((value, i) => {
-    const angle = angleSlice * i - Math.PI / 2;
-    const r = (radius / 5) * Math.max(0, Math.min(5, value));
-    const x = centerX + r * Math.cos(angle);
-    const y = centerY + r * Math.sin(angle);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.closePath();
-  ctx.stroke();
+  // Legend
+  ctx.font = "9px 'DM Sans', Inter, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  const ly = h - 14;
+  ctx.strokeStyle = C.pos; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(16, ly); ctx.lineTo(32, ly); ctx.stroke();
+  ctx.fillStyle = C.taupe; ctx.fillText("current 60d", 36, ly);
+  ctx.strokeStyle = C.taupe; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(110, ly); ctx.lineTo(126, ly); ctx.stroke();
   ctx.setLineDash([]);
+  ctx.fillText("prior 60d", 130, ly);
 }
 
-// Draw equirectangular map with country nodes
+// ─── Equirectangular Map ──────────────────────────────────────────────────────
 export function drawEquirectangularMap(
   canvas: HTMLCanvasElement,
-  countries: CountryNode[]
+  nodes: CountryNode[]
 ) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  const W = 700, H = 320;
+  const { ctx, w, h } = setupHiDPI(canvas, W, H);
 
-  const width = canvas.width;
-  const height = canvas.height;
+  ctx.fillStyle = C.paper;
+  ctx.fillRect(0, 0, w, h);
 
-  // Background
-  ctx.fillStyle = "#F5F3ED";
-  ctx.fillRect(0, 0, width, height);
+  // Grid lines
+  ctx.strokeStyle = C.grid;
+  ctx.lineWidth = 0.5;
+  for (let lat = -60; lat <= 80; lat += 30) {
+    const y = ((90 - lat) / 180) * h;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+  for (let lng = -180; lng <= 180; lng += 60) {
+    const x = ((lng + 180) / 360) * w;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
 
-  // Draw simplified world map outline
-  ctx.strokeStyle = "#D4CEC1";
-  ctx.lineWidth = 1;
-  ctx.fillStyle = "#FAFAF8";
+  // Continent outlines (simplified polygons)
+  const continents: [number, number][][] = [
+    // North America
+    [[-125,48],[-70,48],[-65,44],[-60,46],[-55,47],[-52,47],[-66,44],[-80,25],[-87,15],[-90,15],[-105,20],[-117,32],[-125,38],[-125,48]],
+    // South America
+    [[-80,10],[-60,12],[-50,5],[-35,-5],[-35,-20],[-50,-35],[-65,-55],[-70,-55],[-75,-50],[-80,-35],[-80,-20],[-75,-10],[-80,10]],
+    // Europe
+    [[-10,36],[30,36],[30,45],[40,42],[42,42],[40,38],[28,36],[36,37],[36,42],[42,42],[40,48],[30,55],[25,60],[20,63],[15,65],[10,63],[5,60],[-5,58],[-10,52],[-8,44],[-10,36]],
+    // Africa
+    [[-18,15],[50,15],[50,10],[42,10],[42,0],[40,-10],[35,-25],[25,-35],[18,-35],[12,-25],[10,-10],[8,5],[0,5],[-18,15]],
+    // Asia
+    [[25,40],[180,40],[180,70],[140,70],[130,60],[120,55],[100,50],[80,45],[70,40],[60,25],[55,20],[50,15],[40,15],[30,15],[25,40]],
+    // Australia
+    [[115,-20],[155,-20],[155,-40],[145,-45],[135,-40],[125,-35],[115,-30],[115,-20]],
+  ];
 
-  // Draw country nodes
-  countries.forEach((country) => {
-    // Convert lat/lng to canvas coordinates (equirectangular projection)
-    const x = ((country.lng + 180) / 360) * width;
-    const y = ((90 - country.lat) / 180) * height;
+  ctx.fillStyle = "rgba(140,127,110,0.12)";
+  ctx.strokeStyle = C.rule2;
+  ctx.lineWidth = 0.8;
 
-    // Draw node
-    const color = country.change >= 0 ? "#2D5016" : "#8B4513";
-    ctx.fillStyle = color;
+  continents.forEach(poly => {
     ctx.beginPath();
-    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    poly.forEach(([lng, lat], i) => {
+      const x = ((lng + 180) / 360) * w;
+      const y = ((90 - lat) / 180) * h;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.closePath();
     ctx.fill();
-
-    // Draw label
-    ctx.fillStyle = "#4A4A4A";
-    ctx.font = "10px Inter";
-    ctx.textAlign = "center";
-    ctx.fillText(country.code, x, y - 12);
-
-    // Draw change percentage
-    ctx.fillStyle = color;
-    ctx.font = "bold 9px JetBrains Mono";
-    ctx.fillText(
-      (country.change >= 0 ? "+" : "") + country.change.toFixed(2) + "%",
-      x,
-      y + 14
-    );
+    ctx.stroke();
   });
 
-  // Draw grid
-  ctx.strokeStyle = "#E8E3D8";
-  ctx.lineWidth = 0.5;
-  for (let lat = -90; lat <= 90; lat += 30) {
-    const y = ((90 - lat) / 180) * height;
+  // Country nodes
+  nodes.forEach(node => {
+    const x = ((node.lng + 180) / 360) * w;
+    const y = ((90 - node.lat) / 180) * h;
+    const isPos = node.change >= 0;
+
+    // Outer ring
     ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
-  }
-  for (let lng = -180; lng <= 180; lng += 30) {
-    const x = ((lng + 180) / 360) * width;
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
-    ctx.stroke();
-  }
-}
+    ctx.arc(x, y, 9, 0, Math.PI * 2);
+    ctx.fillStyle = isPos ? "rgba(58,92,42,0.15)" : "rgba(122,46,26,0.15)";
+    ctx.fill();
 
-// Draw exchange orbit (24H UTC circular)
-export function drawExchangeOrbit(
-  canvas: HTMLCanvasElement,
-  exchanges: ExchangeMarker[]
-) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-
-  const width = canvas.width;
-  const height = canvas.height;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = Math.min(width, height) / 2 - 30;
-
-  // Background
-  ctx.fillStyle = "#EAE3D2";
-  ctx.fillRect(0, 0, width, height);
-
-  // Draw concentric circles
-  ctx.strokeStyle = "#D4CEC1";
-  ctx.lineWidth = 1;
-  for (let i = 1; i <= 3; i++) {
-    const r = (radius / 3) * i;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // Draw 24H markers
-  ctx.strokeStyle = "#A89F92";
-  ctx.lineWidth = 1;
-  for (let hour = 0; hour < 24; hour += 6) {
-    const angle = (hour / 24) * Math.PI * 2 - Math.PI / 2;
-    const x1 = centerX + (radius + 10) * Math.cos(angle);
-    const y1 = centerY + (radius + 10) * Math.sin(angle);
-    const x2 = centerX + (radius + 20) * Math.cos(angle);
-    const y2 = centerY + (radius + 20) * Math.sin(angle);
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-
-    // Draw hour label
-    ctx.fillStyle = "#4A4A4A";
-    ctx.font = "10px Inter";
-    ctx.textAlign = "center";
-    ctx.fillText(hour + "Z", centerX + (radius + 35) * Math.cos(angle), centerY + (radius + 35) * Math.sin(angle));
-  }
-
-  // Draw exchanges
-  exchanges.forEach((exchange) => {
-    const angle = (exchange.hour / 24) * Math.PI * 2 - Math.PI / 2;
-    const x = centerX + (radius * 0.7) * Math.cos(angle);
-    const y = centerY + (radius * 0.7) * Math.sin(angle);
-
-    // Draw marker
-    const color = exchange.isOpen ? "#2D5016" : "#A89F92";
-    ctx.fillStyle = color;
+    // Inner dot
     ctx.beginPath();
     ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = isPos ? C.pos : C.neg;
     ctx.fill();
 
-    // Draw label
-    ctx.fillStyle = color;
-    ctx.font = "9px JetBrains Mono";
-    ctx.textAlign = "center";
-    ctx.fillText(exchange.code, x, y - 10);
+    // Label
+    const sign = node.change >= 0 ? "+" : "";
+    const label = `${node.code} ${sign}${node.change.toFixed(2)}%`;
+    ctx.font = "bold 8px 'JetBrains Mono', monospace";
+    ctx.textAlign = x > w * 0.75 ? "right" : "left";
+    ctx.textBaseline = "middle";
+    const lx = x > w * 0.75 ? x - 12 : x + 12;
+    // Background pill
+    const tw = ctx.measureText(label).width;
+    const pill = { x: lx - (x > w * 0.75 ? tw : 0) - 3, y: y - 7, w: tw + 6, h: 14 };
+    ctx.fillStyle = "rgba(246,241,235,0.88)";
+    ctx.beginPath();
+    ctx.roundRect(pill.x, pill.y, pill.w, pill.h, 2);
+    ctx.fill();
+    ctx.fillStyle = isPos ? C.pos : C.neg;
+    ctx.fillText(label, lx, y);
   });
 
-  // Draw center circle
-  ctx.fillStyle = "#EAE3D2";
-  ctx.strokeStyle = "#D4CEC1";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = "#4A4A4A";
-  ctx.font = "bold 11px Inter";
-  ctx.textAlign = "center";
-  ctx.fillText("EARTH", centerX, centerY + 4);
+  // Legend
+  ctx.font = "9px 'DM Sans', Inter, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  const ly = h - 12;
+  ctx.beginPath(); ctx.arc(16, ly, 4, 0, Math.PI * 2);
+  ctx.fillStyle = C.pos; ctx.fill();
+  ctx.fillStyle = C.taupe; ctx.fillText("Advance", 24, ly);
+  ctx.beginPath(); ctx.arc(82, ly, 4, 0, Math.PI * 2);
+  ctx.fillStyle = C.neg; ctx.fill();
+  ctx.fillStyle = C.taupe; ctx.fillText("Decline", 90, ly);
+  ctx.beginPath(); ctx.arc(148, ly, 4, 0, Math.PI * 2);
+  ctx.fillStyle = C.taupe; ctx.fill();
+  ctx.fillText("Neutral", 156, ly);
 }
 
-// Draw volatility phase moon
+// ─── Exchange Orbit ───────────────────────────────────────────────────────────
+export function drawExchangeOrbit(
+  canvas: HTMLCanvasElement,
+  markers: ExchangeMarker[]
+) {
+  const W = 320, H = 280;
+  const { ctx, w, h } = setupHiDPI(canvas, W, H);
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) / 2 - 48;
+
+  ctx.fillStyle = C.paper;
+  ctx.fillRect(0, 0, w, h);
+
+  // Outer ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 16, 0, Math.PI * 2);
+  ctx.strokeStyle = C.rule;
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Inner ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 16, 0, Math.PI * 2);
+  ctx.strokeStyle = C.grid;
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Hour ticks
+  for (let h24 = 0; h24 < 24; h24++) {
+    const angle = (h24 / 24) * Math.PI * 2 - Math.PI / 2;
+    const inner = r - 8;
+    const outer = r + 8;
+    ctx.beginPath();
+    ctx.moveTo(cx + inner * Math.cos(angle), cy + inner * Math.sin(angle));
+    ctx.lineTo(cx + outer * Math.cos(angle), cy + outer * Math.sin(angle));
+    ctx.strokeStyle = h24 % 6 === 0 ? C.rule2 : C.grid;
+    ctx.lineWidth = h24 % 6 === 0 ? 1 : 0.5;
+    ctx.stroke();
+
+    if (h24 % 6 === 0) {
+      const lx = cx + (r + 26) * Math.cos(angle);
+      const ly = cy + (r + 26) * Math.sin(angle);
+      ctx.fillStyle = C.taupe;
+      ctx.font = "9px 'DM Sans', Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${h24}Z`, lx, ly);
+    }
+  }
+
+  // Current time hand
+  const now = new Date();
+  const utcHour = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const timeAngle = (utcHour / 24) * Math.PI * 2 - Math.PI / 2;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + (r - 20) * Math.cos(timeAngle), cy + (r - 20) * Math.sin(timeAngle));
+  ctx.strokeStyle = C.amber;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Exchange markers
+  markers.forEach(m => {
+    const angle = (m.hour / 24) * Math.PI * 2 - Math.PI / 2;
+    const mx = cx + r * Math.cos(angle);
+    const my = cy + r * Math.sin(angle);
+
+    ctx.beginPath();
+    ctx.arc(mx, my, 6, 0, Math.PI * 2);
+    ctx.fillStyle = m.isOpen ? C.pos : C.taupe;
+    ctx.fill();
+    ctx.strokeStyle = C.cream;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    const lx = cx + (r + 22) * Math.cos(angle);
+    const ly = cy + (r + 22) * Math.sin(angle);
+    ctx.fillStyle = m.isOpen ? C.ink : C.taupe;
+    ctx.font = `${m.isOpen ? "600" : "400"} 9px 'DM Sans', Inter, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(m.code, lx, ly);
+  });
+
+  // Center label
+  ctx.fillStyle = C.ink2;
+  ctx.font = "bold 13px 'Cormorant Garamond', Georgia, serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("EARTH", cx, cy - 6);
+  ctx.fillStyle = C.taupe;
+  ctx.font = "9px 'DM Sans', Inter, sans-serif";
+  ctx.fillText("24H UTC", cx, cy + 8);
+}
+
+// ─── Volatility Moon ─────────────────────────────────────────────────────────
 export function drawVolatilityMoon(
   canvas: HTMLCanvasElement,
   vix: number,
@@ -288,478 +363,500 @@ export function drawVolatilityMoon(
   dxy: number,
   phase: string
 ) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  const W = 320, H = 280;
+  const { ctx, w, h } = setupHiDPI(canvas, W, H);
+  const cx = w / 2, cy = h / 2 - 20;
+  const r = Math.min(w, h) / 2 - 56;
 
-  const width = canvas.width;
-  const height = canvas.height;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = Math.min(width, height) / 2 - 30;
+  ctx.fillStyle = C.paper;
+  ctx.fillRect(0, 0, w, h);
 
-  // Background
-  ctx.fillStyle = "#EAE3D2";
-  ctx.fillRect(0, 0, width, height);
-
-  // Draw moon
-  ctx.fillStyle = "#F5F3ED";
-  ctx.strokeStyle = "#4A4A4A";
-  ctx.lineWidth = 2;
+  // Moon shadow
   ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(140,127,110,0.15)";
   ctx.fill();
+
+  // Moon body
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = C.offwhite;
+  ctx.fill();
+  ctx.strokeStyle = C.rule2;
+  ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Draw phase (simplified)
-  const phaseValue = getPhaseValue(phase);
-  ctx.fillStyle = "#8B7355";
+  // Phase shadow
+  const phaseVal = getPhaseValue(phase);
+  ctx.save();
   ctx.beginPath();
-  if (phaseValue < 0.5) {
-    // Waxing
-    ctx.arc(centerX, centerY, radius, Math.PI / 2, (Math.PI * 3) / 2);
-  } else {
-    // Waning
-    ctx.arc(centerX, centerY, radius, (Math.PI * 3) / 2, Math.PI / 2);
-  }
-  ctx.lineTo(centerX, centerY);
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.clip();
+  const shadowX = cx + (phaseVal - 0.5) * r * 2;
+  ctx.beginPath();
+  ctx.arc(shadowX, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(44,41,36,0.55)";
   ctx.fill();
+  ctx.restore();
 
-  // Draw labels
-  ctx.fillStyle = "#4A4A4A";
-  ctx.font = "11px Inter";
+  // Moon outline again
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = C.rule2;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Phase label
+  ctx.fillStyle = C.taupe;
+  ctx.font = "italic 10px 'Cormorant Garamond', Georgia, serif";
   ctx.textAlign = "center";
-  ctx.fillText("VIX", centerX - 40, centerY + 60);
-  ctx.font = "bold 14px JetBrains Mono";
-  ctx.fillText(vix.toFixed(1), centerX - 40, centerY + 80);
+  ctx.textBaseline = "middle";
+  ctx.fillText(phase, cx, cy + r + 16);
 
-  ctx.font = "11px Inter";
-  ctx.fillText("MOVE", centerX, centerY + 60);
-  ctx.font = "bold 14px JetBrains Mono";
-  ctx.fillText(move.toFixed(0), centerX, centerY + 80);
-
-  ctx.font = "11px Inter";
-  ctx.fillText("DXY σ", centerX + 40, centerY + 60);
-  ctx.font = "bold 14px JetBrains Mono";
-  ctx.fillText(dxy.toFixed(2), centerX + 40, centerY + 80);
-
-  ctx.font = "10px Inter";
-  ctx.fillStyle = "#A89F92";
-  ctx.fillText(phase, centerX, centerY + 110);
+  // Stats row
+  const stats = [
+    { label: "VIX", value: vix.toFixed(1) },
+    { label: "MOVE", value: move.toFixed(0) },
+    { label: "DXY σ", value: dxy.toFixed(2) },
+  ];
+  const statY = h - 32;
+  stats.forEach((s, i) => {
+    const sx = (i + 0.5) * (w / 3);
+    ctx.fillStyle = C.taupe;
+    ctx.font = "9px 'DM Sans', Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(s.label, sx, statY);
+    ctx.fillStyle = C.ink;
+    ctx.font = "bold 14px 'JetBrains Mono', monospace";
+    ctx.fillText(s.value, sx, statY + 16);
+  });
 }
 
 function getPhaseValue(phase: string): number {
   const phases: Record<string, number> = {
-    "new moon": 0,
-    "waxing crescent": 0.125,
-    "first qtr": 0.25,
-    "waxing gibbous": 0.375,
-    "full moon": 0.5,
-    "waning gibbous": 0.625,
-    "last qtr": 0.75,
-    "waning crescent": 0.875,
+    "new moon": 0, "waxing crescent": 0.125, "first qtr": 0.25,
+    "waxing gibbous": 0.375, "full moon": 0.5, "waning gibbous": 0.625,
+    "last qtr": 0.75, "waning crescent": 0.875,
   };
-  return phases[phase.toLowerCase()] || 0.5;
+  return phases[phase.toLowerCase()] ?? 0.5;
 }
 
-// Draw sector rose (radial chart)
+// ─── Sector Rose ──────────────────────────────────────────────────────────────
 export function drawSectorRose(
   canvas: HTMLCanvasElement,
   sectors: Array<{ name: string; value: number }>
 ) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  const W = 320, H = 280;
+  const { ctx, w, h } = setupHiDPI(canvas, W, H);
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) / 2 - 44;
 
-  const width = canvas.width;
-  const height = canvas.height;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = Math.min(width, height) / 2 - 30;
+  ctx.fillStyle = C.paper;
+  ctx.fillRect(0, 0, w, h);
 
-  // Background
-  ctx.fillStyle = "#EAE3D2";
-  ctx.fillRect(0, 0, width, height);
+  const maxVal = Math.max(...sectors.map(s => Math.abs(s.value)), 0.01);
+  const slice = (Math.PI * 2) / sectors.length;
 
-  const sliceAngle = (Math.PI * 2) / sectors.length;
-
-  sectors.forEach((sector, i) => {
-    const angle = sliceAngle * i - Math.PI / 2;
-    const nextAngle = sliceAngle * (i + 1) - Math.PI / 2;
-
-    // Scale value to radius
-    const maxValue = Math.max(...sectors.map((s) => Math.abs(s.value)));
-    const sectorRadius = (Math.abs(sector.value) / maxValue) * radius;
-
-    // Draw sector
-    const color = sector.value >= 0 ? "#2D5016" : "#8B4513";
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.7;
+  // Grid rings
+  for (let i = 1; i <= 4; i++) {
     ctx.beginPath();
-    ctx.moveTo(centerX, centerY);
-    ctx.arc(centerX, centerY, sectorRadius, angle, nextAngle);
-    ctx.lineTo(centerX, centerY);
+    ctx.arc(cx, cy, (r / 4) * i, 0, Math.PI * 2);
+    ctx.strokeStyle = C.grid;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+
+  sectors.forEach((s, i) => {
+    const startAngle = slice * i - Math.PI / 2;
+    const endAngle   = slice * (i + 1) - Math.PI / 2;
+    const sr = (Math.abs(s.value) / maxVal) * r;
+    const isPos = s.value >= 0;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, sr, startAngle, endAngle);
+    ctx.closePath();
+    ctx.fillStyle = isPos ? "rgba(58,92,42,0.65)" : "rgba(122,46,26,0.65)";
     ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.strokeStyle = isPos ? C.pos : C.neg;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
 
-    // Draw label
-    const labelAngle = (angle + nextAngle) / 2;
-    const labelRadius = radius + 20;
-    const labelX = centerX + labelRadius * Math.cos(labelAngle);
-    const labelY = centerY + labelRadius * Math.sin(labelAngle);
-
-    ctx.fillStyle = "#4A4A4A";
-    ctx.font = "10px Inter";
+    // Label
+    const midAngle = (startAngle + endAngle) / 2;
+    const lx = cx + (r + 20) * Math.cos(midAngle);
+    const ly = cy + (r + 20) * Math.sin(midAngle);
+    ctx.fillStyle = C.taupe;
+    ctx.font = "bold 8px 'DM Sans', Inter, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(sector.name, labelX, labelY);
+    ctx.textBaseline = "middle";
+    ctx.fillText(s.name, lx, ly);
   });
+
+  // Center
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+  ctx.fillStyle = C.amber;
+  ctx.fill();
 }
 
-// Draw Chladni correlation plate with ETF nodes
+// ─── Chladni Plate ────────────────────────────────────────────────────────────
 export function drawChladniPlate(
   canvas: HTMLCanvasElement,
   etfNodes: Array<{ ticker: string; x: number; y: number; change: number }>
 ) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  const W = 320, H = 280;
+  const { ctx, w, h } = setupHiDPI(canvas, W, H);
 
-  const width = canvas.width;
-  const height = canvas.height;
+  ctx.fillStyle = C.paper;
+  ctx.fillRect(0, 0, w, h);
 
-  // Draw correlation pattern background
-  const imageData = ctx.createImageData(width, height);
+  // Chladni pattern — draw in Aesop palette
+  const imageData = ctx.createImageData(w, h);
   const data = imageData.data;
-
-  for (let i = 0; i < width; i++) {
-    for (let j = 0; j < height; j++) {
-      const x = (i / width) * 4 - 2;
-      const y = (j / height) * 4 - 2;
-
-      // Chladni plate equation
-      const value =
-        Math.sin(x * Math.PI) * Math.sin(y * Math.PI) +
-        0.5 * Math.sin(2 * x * Math.PI) * Math.sin(2 * y * Math.PI);
-
-      const brightness = Math.abs(value) * 200 + 55;
-      const idx = (j * width + i) * 4;
-
-      data[idx] = brightness * 0.9;
-      data[idx + 1] = brightness * 0.85;
-      data[idx + 2] = brightness * 0.8;
-      data[idx + 3] = 255;
+  for (let i = 0; i < w; i++) {
+    for (let j = 0; j < h; j++) {
+      const x = (i / w) * 4 - 2;
+      const y = (j / h) * 4 - 2;
+      const v = Math.sin(x * Math.PI) * Math.sin(y * Math.PI)
+              + 0.5 * Math.sin(2 * x * Math.PI) * Math.sin(2 * y * Math.PI);
+      const t = Math.abs(v);
+      const idx = (j * w + i) * 4;
+      // Cream base with ink nodal lines
+      const base = 240 - t * 60;
+      data[idx]   = Math.round(base * 0.97);
+      data[idx+1] = Math.round(base * 0.94);
+      data[idx+2] = Math.round(base * 0.88);
+      data[idx+3] = 255;
     }
   }
-
   ctx.putImageData(imageData, 0, 0);
 
-  // Draw ETF nodes
-  etfNodes.forEach((node) => {
-    const x = (node.x / 100) * width;
-    const y = (node.y / 100) * height;
+  // ETF nodes
+  etfNodes.forEach(node => {
+    const nx = (node.x / 100) * w;
+    const ny = (node.y / 100) * h;
+    const isPos = node.change >= 0;
 
-    // Draw node circle
-    const color = node.change >= 0 ? "#2D5016" : "#8B4513";
-    ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.arc(nx, ny, 7, 0, Math.PI * 2);
+    ctx.fillStyle = isPos ? C.pos : C.neg;
     ctx.fill();
+    ctx.strokeStyle = C.cream;
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
-    // Draw label background
-    ctx.fillStyle = "rgba(234, 227, 210, 0.9)";
-    ctx.fillRect(x - 25, y - 20, 50, 18);
-
-    // Draw label
-    ctx.fillStyle = "#4A4A4A";
-    ctx.font = "bold 10px JetBrains Mono";
+    ctx.fillStyle = C.cream;
+    ctx.font = "bold 7px 'JetBrains Mono', monospace";
     ctx.textAlign = "center";
-    ctx.fillText(node.ticker, x, y - 8);
-
-    // Draw change
-    ctx.fillStyle = color;
-    ctx.font = "9px JetBrains Mono";
-    ctx.fillText(
-      (node.change >= 0 ? "+" : "") + node.change.toFixed(2) + "%",
-      x,
-      y + 6
-    );
+    ctx.textBaseline = "middle";
+    ctx.fillText(node.ticker, nx, ny);
   });
+
+  // Border
+  ctx.strokeStyle = C.rule;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
 }
 
-// Draw liquidity depth cathedral
+// ─── Liquidity Depth ──────────────────────────────────────────────────────────
 export function drawLiquidityDepth(
   canvas: HTMLCanvasElement,
   bids: number[],
   asks: number[],
   mid: number
 ) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  const W = 320, H = 240;
+  const { ctx, w, h } = setupHiDPI(canvas, W, H);
+  const pad = { t: 20, r: 20, b: 36, l: 36 };
+  const cw = w - pad.l - pad.r;
+  const ch = h - pad.t - pad.b;
 
-  const width = canvas.width;
-  const height = canvas.height;
-  const padding = 40;
-  const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
+  ctx.fillStyle = C.paper;
+  ctx.fillRect(0, 0, w, h);
 
-  // Background
-  ctx.fillStyle = "#EAE3D2";
-  ctx.fillRect(0, 0, width, height);
+  const allVals = [...bids, ...asks].filter(v => v > 0);
+  const maxDepth = allVals.length > 0 ? Math.max(...allVals) : 1;
+  const barW = cw / (bids.length + asks.length);
 
-  const maxDepth = Math.max(...bids, ...asks);
-  const barWidth = chartWidth / (bids.length + asks.length);
-
-  // Draw bids (left side, blue)
+  // Bids
   bids.forEach((depth, i) => {
-    const x = padding + i * barWidth;
-    const barHeight = (depth / maxDepth) * chartHeight;
-    const y = height - padding - barHeight;
-
-    ctx.fillStyle = "#2D5016";
-    ctx.globalAlpha = 0.6;
-    ctx.fillRect(x, y, barWidth * 0.9, barHeight);
-    ctx.globalAlpha = 1;
+    const bh = (depth / maxDepth) * ch;
+    const bx = pad.l + i * barW;
+    const by = pad.t + ch - bh;
+    ctx.fillStyle = "rgba(58,92,42,0.7)";
+    ctx.fillRect(bx + 1, by, barW - 2, bh);
   });
 
-  // Draw asks (right side, red)
+  // Asks
   asks.forEach((depth, i) => {
-    const x = padding + (bids.length + i) * barWidth;
-    const barHeight = (depth / maxDepth) * chartHeight;
-    const y = height - padding - barHeight;
-
-    ctx.fillStyle = "#8B4513";
-    ctx.globalAlpha = 0.6;
-    ctx.fillRect(x, y, barWidth * 0.9, barHeight);
-    ctx.globalAlpha = 1;
+    const bh = (depth / maxDepth) * ch;
+    const bx = pad.l + (bids.length + i) * barW;
+    const by = pad.t + ch - bh;
+    ctx.fillStyle = "rgba(122,46,26,0.7)";
+    ctx.fillRect(bx + 1, by, barW - 2, bh);
   });
 
-  // Draw mid-price line
-  ctx.strokeStyle = "#4A4A4A";
-  ctx.lineWidth = 2;
-  ctx.setLineDash([4, 4]);
-  const midY = height - padding - (mid / maxDepth) * chartHeight;
-  ctx.beginPath();
-  ctx.moveTo(padding, midY);
-  ctx.lineTo(width - padding, midY);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  // Mid line
+  if (mid > 0) {
+    const midY = pad.t + ch - (mid / maxDepth) * ch;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, midY);
+    ctx.lineTo(w - pad.r, midY);
+    ctx.strokeStyle = C.amber;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
-  // Draw axes
-  ctx.strokeStyle = "#A89F92";
+  // Axes
+  ctx.strokeStyle = C.rule2;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(padding, height - padding);
-  ctx.lineTo(width - padding, height - padding);
+  ctx.moveTo(pad.l, pad.t + ch);
+  ctx.lineTo(w - pad.r, pad.t + ch);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t);
+  ctx.lineTo(pad.l, pad.t + ch);
   ctx.stroke();
 
-  // Draw labels
-  ctx.fillStyle = "#4A4A4A";
-  ctx.font = "10px Inter";
+  // Divider
+  const midX = pad.l + bids.length * barW;
+  ctx.beginPath();
+  ctx.moveTo(midX, pad.t);
+  ctx.lineTo(midX, pad.t + ch);
+  ctx.strokeStyle = C.rule;
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = C.taupe;
+  ctx.font = "9px 'DM Sans', Inter, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("BIDS", padding + chartWidth / 4, height - 10);
-  ctx.fillText("ASKS", width - padding - chartWidth / 4, height - 10);
+  ctx.textBaseline = "top";
+  ctx.fillText("BIDS", pad.l + (bids.length * barW) / 2, pad.t + ch + 8);
+  ctx.fillText("ASKS", pad.l + bids.length * barW + (asks.length * barW) / 2, pad.t + ch + 8);
 }
 
-// Draw volatility term structure curve
+// ─── Volatility Curve ─────────────────────────────────────────────────────────
 export function drawVolatilityCurve(
   canvas: HTMLCanvasElement,
   current: number[],
   prior: number[]
 ) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  const W = 320, H = 240;
+  const { ctx, w, h } = setupHiDPI(canvas, W, H);
+  const pad = { t: 20, r: 20, b: 36, l: 40 };
+  const cw = w - pad.l - pad.r;
+  const ch = h - pad.t - pad.b;
 
-  const width = canvas.width;
-  const height = canvas.height;
-  const padding = 40;
-  const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
+  ctx.fillStyle = C.paper;
+  ctx.fillRect(0, 0, w, h);
 
-  // Background
-  ctx.fillStyle = "#EAE3D2";
-  ctx.fillRect(0, 0, width, height);
-
-  const maxVol = Math.max(...current, ...prior);
+  const allVals = [...current, ...prior].filter(v => v > 0);
+  const maxVol = allVals.length > 0 ? Math.max(...allVals) * 1.15 : 30;
   const terms = ["1M", "3M", "6M", "12M", "18M", "24M"];
-  const spacing = chartWidth / (terms.length - 1);
+  const spacing = cw / (terms.length - 1);
 
-  // Draw grid
-  ctx.strokeStyle = "#E8E3D8";
-  ctx.lineWidth = 1;
-  for (let i = 0; i < terms.length; i++) {
-    const x = padding + i * spacing;
-    ctx.beginPath();
-    ctx.moveTo(x, padding);
-    ctx.lineTo(x, height - padding);
-    ctx.stroke();
-  }
-
-  // Draw current curve (solid)
-  ctx.strokeStyle = "#2D5016";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  current.forEach((vol, i) => {
-    const x = padding + i * spacing;
-    const y = height - padding - (vol / maxVol) * chartHeight;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  // Draw prior curve (dashed)
-  ctx.strokeStyle = "#A89F92";
-  ctx.setLineDash([4, 4]);
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  prior.forEach((vol, i) => {
-    const x = padding + i * spacing;
-    const y = height - padding - (vol / maxVol) * chartHeight;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Draw axes
-  ctx.strokeStyle = "#A89F92";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padding, height - padding);
-  ctx.lineTo(width - padding, height - padding);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(padding, padding);
-  ctx.lineTo(padding, height - padding);
-  ctx.stroke();
-
-  // Draw term labels
-  ctx.fillStyle = "#4A4A4A";
-  ctx.font = "10px Inter";
-  ctx.textAlign = "center";
-  terms.forEach((term, i) => {
-    const x = padding + i * spacing;
-    ctx.fillText(term, x, height - 10);
-  });
-
-  // Draw vol labels
-  ctx.textAlign = "right";
+  // Grid
   for (let i = 0; i <= 4; i++) {
-    const vol = (maxVol / 4) * i;
-    const y = height - padding - (vol / maxVol) * chartHeight;
-    ctx.fillText(vol.toFixed(0) + "%", padding - 10, y + 4);
+    const gy = pad.t + (ch / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, gy);
+    ctx.lineTo(w - pad.r, gy);
+    ctx.strokeStyle = C.grid;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    const val = maxVol - (maxVol / 4) * i;
+    ctx.fillStyle = C.taupe;
+    ctx.font = "8px 'DM Sans', Inter, sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText(val.toFixed(0) + "%", pad.l - 6, gy);
   }
+
+  const drawLine = (vals: number[], color: string, dash: number[], lw: number) => {
+    if (vals.length < 2) return;
+    ctx.beginPath();
+    ctx.setLineDash(dash);
+    vals.forEach((v, i) => {
+      const x = pad.l + i * spacing;
+      const y = pad.t + ch - (v / maxVol) * ch;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+
+  drawLine(prior,   C.taupe, [4, 3], 1);
+  drawLine(current, C.pos,   [],     2);
+
+  // Dots on current
+  current.forEach((v, i) => {
+    const x = pad.l + i * spacing;
+    const y = pad.t + ch - (v / maxVol) * ch;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = C.pos;
+    ctx.fill();
+  });
+
+  // Axes
+  ctx.strokeStyle = C.rule2;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t + ch);
+  ctx.lineTo(w - pad.r, pad.t + ch);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t);
+  ctx.lineTo(pad.l, pad.t + ch);
+  ctx.stroke();
+
+  // Term labels
+  ctx.fillStyle = C.taupe;
+  ctx.font = "9px 'DM Sans', Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  terms.forEach((t, i) => {
+    ctx.fillText(t, pad.l + i * spacing, pad.t + ch + 8);
+  });
+
+  // Legend
+  const ly = h - 10;
+  ctx.strokeStyle = C.pos; ctx.lineWidth = 2; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(pad.l, ly); ctx.lineTo(pad.l + 18, ly); ctx.stroke();
+  ctx.fillStyle = C.taupe; ctx.font = "8px 'DM Sans', Inter, sans-serif";
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.fillText("current", pad.l + 22, ly);
+  ctx.strokeStyle = C.taupe; ctx.lineWidth = 1; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(pad.l + 72, ly); ctx.lineTo(pad.l + 90, ly); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillText("prior", pad.l + 94, ly);
 }
 
-
-// Draw correlation heatmap (14x14 matrix)
+// ─── Correlation Heatmap ──────────────────────────────────────────────────────
 export function drawCorrelationHeatmap(
   canvas: HTMLCanvasElement,
   correlationMatrix: number[][]
 ) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-
-  const width = canvas.width;
-  const height = canvas.height;
-  const tickers = ["SPY", "QQQ", "IWM", "ACWI", "EFA", "EEM", "EWJ", "MCHI", "INDA", "EWZ", "EWG", "EWU", "TLT", "GLD"];
+  const W = 420, H = 380;
+  const { ctx, w, h } = setupHiDPI(canvas, W, H);
+  const tickers = ["SPY","QQQ","IWM","ACWI","EFA","EEM","EWJ","MCHI","INDA","EWZ","EWG","EWU","TLT","GLD"];
   const n = tickers.length;
-  
-  const padding = 50;
-  const cellSize = (width - padding * 2) / n;
-  const chartHeight = height - padding * 2;
+  const padL = 48, padT = 48, padR = 16, padB = 32;
+  const cellW = (w - padL - padR) / n;
+  const cellH = (h - padT - padB) / n;
 
-  // Background
-  ctx.fillStyle = "#F1ECE0";
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = C.cream;
+  ctx.fillRect(0, 0, w, h);
 
-  // Draw heatmap cells
+  // Cells
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
-      const corr = correlationMatrix[i]?.[j] ?? (i === j ? 1 : 0.5);
-      const x = padding + j * cellSize;
-      const y = padding + i * cellSize;
+      const corr = correlationMatrix[i]?.[j] ?? (i === j ? 1 : 0);
+      const x = padL + j * cellW;
+      const y = padT + i * cellH;
 
-      // Color gradient: red (negative) to white (0) to green (positive)
-      let r, g, b;
-      if (corr >= 0) {
-        // Green gradient (0 to 1)
-        r = Math.round(255 * (1 - corr * 0.6));
-        g = Math.round(255 * (0.4 + corr * 0.6));
-        b = Math.round(255 * (1 - corr * 0.4));
+      // Aesop palette: amber-tinted warm scale
+      let color: string;
+      if (i === j) {
+        color = C.amber; // diagonal
+      } else if (corr > 0) {
+        // Positive: cream → sage/forest
+        const t = Math.min(corr, 1);
+        const r = Math.round(246 - t * 120);
+        const g = Math.round(241 - t * 100);
+        const b = Math.round(235 - t * 150);
+        color = `rgb(${r},${g},${b})`;
       } else {
-        // Red gradient (-1 to 0)
-        r = Math.round(255 * (0.4 - corr * 0.6));
-        g = Math.round(255 * (1 + corr * 0.4));
-        b = Math.round(255 * (1 + corr * 0.4));
+        // Negative: cream → terra red
+        const t = Math.min(Math.abs(corr), 1);
+        const r = Math.round(246 - t * 60);
+        const g = Math.round(241 - t * 150);
+        const b = Math.round(235 - t * 180);
+        color = `rgb(${r},${g},${b})`;
       }
 
-      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-      ctx.fillRect(x, y, cellSize, cellSize);
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, cellW, cellH);
 
-      // Draw border
-      ctx.strokeStyle = "#D5CFBD";
+      // Cell border
+      ctx.strokeStyle = C.cream;
       ctx.lineWidth = 0.5;
-      ctx.strokeRect(x, y, cellSize, cellSize);
+      ctx.strokeRect(x, y, cellW, cellH);
+
+      // Value text for larger cells
+      if (cellW > 20 && i !== j) {
+        ctx.fillStyle = Math.abs(corr) > 0.5 ? C.cream : C.taupe;
+        ctx.font = "7px 'JetBrains Mono', monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(corr.toFixed(2), x + cellW / 2, y + cellH / 2);
+      }
     }
   }
 
-  // Draw row labels (left side)
-  ctx.fillStyle = "#5A574C";
-  ctx.font = "9px JetBrains Mono";
+  // Row labels
+  ctx.fillStyle = C.taupe;
+  ctx.font = "bold 8px 'JetBrains Mono', monospace";
   ctx.textAlign = "right";
-  tickers.forEach((ticker, i) => {
-    const y = padding + i * cellSize + cellSize / 2 + 3;
-    ctx.fillText(ticker, padding - 8, y);
+  ctx.textBaseline = "middle";
+  tickers.forEach((t, i) => {
+    ctx.fillText(t, padL - 6, padT + i * cellH + cellH / 2);
   });
 
-  // Draw column labels (top)
-  ctx.textAlign = "center";
-  ctx.save();
-  tickers.forEach((ticker, j) => {
-    const x = padding + j * cellSize + cellSize / 2;
-    ctx.translate(x, padding - 8);
-    ctx.rotate(-Math.PI / 4);
-    ctx.fillText(ticker, 0, 0);
-    ctx.restore();
-    ctx.save();
-  });
-  ctx.restore();
-
-  // Draw title
-  ctx.fillStyle = "#1C1B17";
-  ctx.font = "12px Inter";
-  ctx.textAlign = "center";
-  ctx.fillText("60D RETURN CORRELATION MATRIX", width / 2, 20);
-
-  // Draw legend
-  const legendY = height - 20;
-  const legendX = padding;
-  const legendWidth = 200;
-
-  ctx.fillStyle = "#5A574C";
-  ctx.font = "9px Inter";
+  // Column labels (rotated)
+  ctx.font = "bold 8px 'JetBrains Mono', monospace";
   ctx.textAlign = "left";
-  ctx.fillText("Correlation:", legendX, legendY);
+  ctx.textBaseline = "middle";
+  tickers.forEach((t, j) => {
+    const x = padL + j * cellW + cellW / 2;
+    ctx.save();
+    ctx.translate(x, padT - 6);
+    ctx.rotate(-Math.PI / 3);
+    ctx.fillStyle = C.taupe;
+    ctx.fillText(t, 0, 0);
+    ctx.restore();
+  });
 
-  // Legend gradient
-  for (let i = 0; i < 100; i++) {
-    const corr = (i / 100) * 2 - 1; // -1 to 1
+  // Legend bar
+  const legX = padL, legY = h - 20, legW = 120, legH = 8;
+  for (let i = 0; i < legW; i++) {
+    const t = i / legW;
+    const corr = t * 2 - 1;
     let r, g, b;
-    if (corr >= 0) {
-      r = Math.round(255 * (1 - corr * 0.6));
-      g = Math.round(255 * (0.4 + corr * 0.6));
-      b = Math.round(255 * (1 - corr * 0.4));
+    if (corr > 0) {
+      r = Math.round(246 - corr * 120);
+      g = Math.round(241 - corr * 100);
+      b = Math.round(235 - corr * 150);
     } else {
-      r = Math.round(255 * (0.4 - corr * 0.6));
-      g = Math.round(255 * (1 + corr * 0.4));
-      b = Math.round(255 * (1 + corr * 0.4));
+      const a = Math.abs(corr);
+      r = Math.round(246 - a * 60);
+      g = Math.round(241 - a * 150);
+      b = Math.round(235 - a * 180);
     }
-    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-    ctx.fillRect(legendX + 80 + i * 1.2, legendY - 12, 1.2, 12);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(legX + i, legY, 1, legH);
   }
+  ctx.strokeStyle = C.rule;
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(legX, legY, legW, legH);
 
-  ctx.fillStyle = "#5A574C";
-  ctx.font = "8px Inter";
+  ctx.fillStyle = C.taupe;
+  ctx.font = "8px 'DM Sans', Inter, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("−1.0", legX, legY + legH + 3);
   ctx.textAlign = "center";
-  ctx.fillText("-1.0", legendX + 80, legendY + 8);
-  ctx.fillText("0.0", legendX + 80 + 60, legendY + 8);
-  ctx.fillText("+1.0", legendX + 80 + 120, legendY + 8);
+  ctx.fillText("0", legX + legW / 2, legY + legH + 3);
+  ctx.textAlign = "right";
+  ctx.fillText("+1.0", legX + legW, legY + legH + 3);
+  ctx.textAlign = "left";
+  ctx.fillText("60D return correlation", legX + legW + 10, legY + legH / 2);
 }

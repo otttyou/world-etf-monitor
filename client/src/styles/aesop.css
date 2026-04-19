@@ -1,67 +1,39 @@
 /* ============================================================================
    AESOP DESIGN SYSTEM - World ETFs Monitor Observatory
-   A quiet instrument for watching capital move across latitudes
+   Warm Minimal — cream, ink, amber, sage. No neon. No gaps.
    ============================================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap");
 
 :root {
-  /* Primary Colors */
-  --cream: #F1ECE0;
-  --paper: #EAE3D2;
-  --paper-2: #E3DBC6;
-  
-  /* Typography Colors */
-  --ink: #1C1B17;
-  --ink-2: #2E2C26;
-  --ink-3: #5A574C;
-  --ink-4: #8A8573;
-  
-  /* Structural Colors */
-  --rule: #BCB6A3;
-  --rule-2: #D5CFBD;
-  
-  /* Accent Colors */
-  --olive: #3E3B22;
-  --forest: #2A3B2A;
-  --terra: #8A3B1E;
-  --sage: #6E7A5A;
-  --ochre: #8E7A2A;
-  --red: #8A2A1E;
-  --green: #3B5A2A;
-  
-  /* Typography Families */
-  --serif: "Cormorant Garamond", "GT Sectra", "Hoefler Text", Georgia, serif;
-  --sans: "Inter", "Söhne", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --mono: "JetBrains Mono", "Söhne Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  
-  /* Spacing System (8px base) */
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 12px;
-  --space-lg: 16px;
-  --space-xl: 20px;
-  --space-2xl: 24px;
-  --space-3xl: 32px;
-  
-  /* Border Radius */
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 8px;
+  --cream:   #F4EFE6;
+  --paper:   #EDE7DB;
+  --paper-2: #E5DDD0;
+  --ink:     #1A1916;
+  --ink-2:   #2C2A24;
+  --ink-3:   #5A5749;
+  --ink-4:   #8A8576;
+  --rule:    #C8C1B0;
+  --rule-2:  #D8D2C4;
+  --amber:   #B5864A;
+  --sage:    #6B7B6E;
+  --green:   #3A5C2A;
+  --red:     #7A2E1A;
+  --serif:   "Cormorant Garamond", Georgia, serif;
+  --sans:    "DM Sans", "Inter", Helvetica, Arial, sans-serif;
+  --mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sp-xs:   3px;
+  --sp-sm:   6px;
+  --sp-md:   10px;
+  --sp-lg:   16px;
+  --sp-xl:   22px;
+  --sp-2xl:  32px;
 }
 
-@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@300;400;500;600&display=swap");
-
-/* ============================================================================
-   RESET & BASE STYLES
-   ============================================================================ */
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  padding: 0;
+/* ── Reset ──────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
   background: var(--cream);
   color: var(--ink);
   font-family: var(--sans);
@@ -71,171 +43,97 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-body {
-  background-image: 
-    radial-gradient(1200px 600px at 80% -10%, rgba(90, 87, 76, 0.03), transparent 60%),
-    radial-gradient(900px 500px at -5% 100%, rgba(90, 87, 76, 0.02), transparent 60%);
-  background-attachment: fixed;
-}
-
-/* ============================================================================
-   UTILITY CLASSES
-   ============================================================================ */
-
-.aesop-mono {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.aesop-serif {
-  font-family: var(--serif);
-}
-
-.aesop-caps {
+/* ── Utility ────────────────────────────────────────────────────────────────── */
+.pos  { color: var(--green); }
+.neg  { color: var(--red);   }
+.dim  { color: var(--ink-4); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.caps {
   font-family: var(--sans);
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-weight: 500;
-  font-size: 9px;
+  font-size: 8px;
   color: var(--ink-3);
 }
 
-.pos {
-  color: var(--green);
-}
-
-.neg {
-  color: var(--red);
-}
-
-.dim {
-  color: var(--ink-4);
-}
-
-.hi {
-  color: var(--ink);
-}
-
-/* ============================================================================
-   META BAR
-   ============================================================================ */
-
+/* ── Meta Bar ───────────────────────────────────────────────────────────────── */
 .aesop-meta {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  padding: var(--space-sm) var(--space-lg);
+  padding: 5px var(--sp-lg);
   border-bottom: 1px solid var(--rule);
   background: var(--cream);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   color: var(--ink-3);
-  gap: var(--space-lg);
+  gap: var(--sp-lg);
+  height: 28px;
+  flex-shrink: 0;
 }
-
-.aesop-meta-left,
-.aesop-meta-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
+.aesop-meta-left, .aesop-meta-right {
+  display: flex; align-items: center; gap: var(--sp-md);
 }
-
-.aesop-meta-right {
-  justify-content: flex-end;
-}
+.aesop-meta-right { justify-content: flex-end; }
 
 .aesop-dot {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--sage);
-  vertical-align: 1px;
+  display: inline-block; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--sage); vertical-align: 1px;
 }
-
 .aesop-dot.live {
-  background: var(--terra);
+  background: var(--red);
   animation: pulse 2.4s infinite;
 }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-/* ============================================================================
-   MASTHEAD
-   ============================================================================ */
-
+/* ── Masthead ───────────────────────────────────────────────────────────────── */
 .aesop-masthead {
-  padding: var(--space-2xl) var(--space-lg);
+  padding: var(--sp-lg) var(--sp-lg);
   border-bottom: 1px solid var(--rule);
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 1fr;
-  gap: var(--space-2xl);
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: var(--sp-xl);
   align-items: end;
   background: var(--cream);
+  flex-shrink: 0;
 }
-
 .aesop-title {
   font-family: var(--serif);
   font-weight: 400;
-  font-size: 36px;
+  font-size: 28px;
   line-height: 1.1;
   letter-spacing: -0.01em;
-  margin: 0;
   font-style: italic;
   color: var(--ink);
 }
-
 .aesop-subtitle {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ink-3);
-  margin-top: var(--space-sm);
-  line-height: 1.4;
-  max-width: 40ch;
+  margin-top: 5px;
+  line-height: 1.45;
+  max-width: 38ch;
 }
-
-.aesop-stat-block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.aesop-stat-block .aesop-caps {
-  display: block;
-  margin-bottom: var(--space-xs);
-}
-
+.aesop-stat-block { display: flex; flex-direction: column; gap: 2px; }
+.aesop-stat-block .aesop-caps { display: block; margin-bottom: 3px; }
 .aesop-stat-block .aesop-val {
   font-family: var(--serif);
-  font-size: 32px;
+  font-size: 30px;
   line-height: 1;
   font-weight: 400;
   color: var(--ink);
 }
-
-.aesop-stat-block .aesop-sfx {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-3);
-  letter-spacing: 0.04em;
-}
-
 .aesop-stat-block .aesop-foot {
-  margin-top: var(--space-xs);
+  margin-top: 3px;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8px;
   color: var(--ink-4);
-  line-height: 1.3;
+  line-height: 1.4;
 }
 
-/* ============================================================================
-   NAVIGATION BAR
-   ============================================================================ */
-
+/* ── Navigation ─────────────────────────────────────────────────────────────── */
 .aesop-nav {
   display: flex;
   gap: 0;
@@ -245,439 +143,396 @@ body {
   top: 0;
   background: var(--cream);
   z-index: 10;
-  height: 36px;
+  height: 32px;
+  flex-shrink: 0;
 }
-
 .aesop-nav-item {
-  padding: var(--space-sm) var(--space-md);
+  padding: 0 var(--sp-md);
   border-right: 1px solid var(--rule);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--ink-3);
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.2s;
+  transition: all 0.15s;
   display: flex;
   align-items: center;
   background: var(--cream);
 }
-
-.aesop-nav-item:hover {
-  background: var(--paper);
-  color: var(--ink-2);
-}
-
+.aesop-nav-item:hover { background: var(--paper); color: var(--ink-2); }
 .aesop-nav-item.active {
   background: var(--paper-2);
   color: var(--ink);
   border-bottom: 2px solid var(--ink);
 }
 
-/* ============================================================================
-   MAIN CONTAINER
-   ============================================================================ */
-
+/* ── Main Container — 3 columns ─────────────────────────────────────────────── */
 .aesop-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 200px 1fr 400px;
   gap: 0;
-  height: calc(100vh - 280px);
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
+.aesop-left-rail,
 .aesop-center,
 .aesop-right-rail {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   border-right: 1px solid var(--rule);
+  min-height: 0;
 }
+.aesop-right-rail { border-right: none; }
 
-.aesop-right-rail {
-  border-right: 0;
-}
+/* Scrollbars */
+.aesop-left-rail::-webkit-scrollbar,
+.aesop-center::-webkit-scrollbar,
+.aesop-right-rail::-webkit-scrollbar { width: 4px; }
+.aesop-left-rail::-webkit-scrollbar-track,
+.aesop-center::-webkit-scrollbar-track,
+.aesop-right-rail::-webkit-scrollbar-track { background: var(--cream); }
+.aesop-left-rail::-webkit-scrollbar-thumb,
+.aesop-center::-webkit-scrollbar-thumb,
+.aesop-right-rail::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 2px; }
 
-/* ============================================================================
-   SECTION HEADERS
-   ============================================================================ */
-
+/* ── Section Headers ────────────────────────────────────────────────────────── */
 .aesop-shead {
-  padding: var(--space-md) var(--space-lg) var(--space-sm);
+  padding: var(--sp-md) var(--sp-lg) var(--sp-sm);
   font-family: var(--serif);
   font-style: italic;
-  font-size: 16px;
+  font-size: 14px;
   color: var(--ink-2);
   border-bottom: 1px solid var(--rule);
-  margin: 0;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: var(--space-md);
+  gap: var(--sp-md);
+  flex-shrink: 0;
 }
-
 .aesop-shead-meta {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8px;
   color: var(--ink-4);
   font-style: normal;
 }
 
-/* ============================================================================
-   ETF TABLE
-   ============================================================================ */
+/* ── Left Rail ──────────────────────────────────────────────────────────────── */
+.aesop-region-item {
+  padding: var(--sp-sm) var(--sp-md);
+  border-bottom: 1px solid var(--rule-2);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--sp-sm);
+  flex-shrink: 0;
+}
+.aesop-region-name {
+  font-family: var(--sans);
+  font-size: 9px;
+  color: var(--ink-2);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aesop-region-sub {
+  font-family: var(--mono);
+  font-size: 7px;
+  color: var(--ink-4);
+  margin-top: 1px;
+}
+.aesop-region-change {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-align: right;
+}
+.aesop-sparkbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 12px;
+  margin-top: 2px;
+}
+.aesop-sparkbar span {
+  display: inline-block;
+  width: 3px;
+  border-radius: 1px;
+  background: var(--rule);
+  min-height: 2px;
+}
+.aesop-sparkbar span.pos { background: var(--green); }
+.aesop-sparkbar span.neg { background: var(--red); }
 
+.aesop-section-label {
+  padding: var(--sp-sm) var(--sp-md);
+  font-family: var(--mono);
+  font-size: 7px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  flex-shrink: 0;
+}
+
+/* ── ETF Table ──────────────────────────────────────────────────────────────── */
 .aesop-etf-table {
-  padding: var(--space-lg) var(--space-lg);
+  padding: 0;
   border-bottom: 1px solid var(--rule);
   overflow-x: auto;
   flex-shrink: 0;
-  background: var(--cream);
 }
-
 .aesop-etf-table table {
   width: 100%;
   border-collapse: collapse;
   font-family: var(--mono);
   font-size: 10px;
 }
-
-.aesop-etf-table thead {
-  border-bottom: 2px solid var(--rule);
-  background: var(--cream);
-}
-
+.aesop-etf-table thead { background: var(--paper); }
 .aesop-etf-table th {
-  padding: var(--space-md) var(--space-sm);
+  padding: 7px var(--sp-md);
   text-align: right;
   font-weight: 500;
   color: var(--ink-3);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 8px;
-  height: 32px;
-  border-bottom: 1px solid var(--rule);
-  background: var(--cream);
+  letter-spacing: 0.1em;
+  font-size: 7px;
+  border-bottom: 2px solid var(--rule);
+  white-space: nowrap;
 }
-
-.aesop-etf-table th:first-child {
-  text-align: left;
-}
-
+.aesop-etf-table th:first-child { text-align: left; padding-left: var(--sp-lg); }
 .aesop-etf-table td {
-  padding: var(--space-md) var(--space-sm);
+  padding: 6px var(--sp-md);
   border-bottom: 1px solid var(--rule-2);
   font-size: 10px;
-  height: 28px;
   text-align: right;
   color: var(--ink);
+  white-space: nowrap;
 }
-
 .aesop-etf-table td:first-child {
   text-align: left;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ink-2);
+  padding-left: var(--sp-lg);
+  font-size: 10px;
+  letter-spacing: 0.04em;
 }
+.aesop-etf-table tbody tr { background: var(--cream); transition: background 0.12s; }
+.aesop-etf-table tbody tr:nth-child(even) { background: var(--paper); }
+.aesop-etf-table tbody tr:hover { background: var(--paper-2); cursor: pointer; }
+.aesop-etf-table td.pos { color: var(--green); font-weight: 500; }
+.aesop-etf-table td.neg { color: var(--red); font-weight: 500; }
 
-.aesop-etf-table tbody tr {
-  background: var(--cream);
-  transition: background-color 0.15s ease;
-}
-
-.aesop-etf-table tbody tr:hover {
-  background: var(--paper);
-}
-
-.aesop-etf-table tbody tr:nth-child(odd) {
-  background: var(--cream);
-}
-
-.aesop-etf-table tbody tr:nth-child(even) {
-  background: var(--paper);
-}
-
-.aesop-etf-table td.pos {
-  color: var(--green);
-  font-weight: 500;
-}
-
-.aesop-etf-table td.neg {
-  color: var(--red);
-  font-weight: 500;
-}
-
-.aesop-etf-table td.neutral {
-  color: var(--ink-3);
-}
-
-/* ============================================================================
-   SECTOR HEATMAP
-   ============================================================================ */
-
+/* ── Sector Heatmap ─────────────────────────────────────────────────────────── */
 .aesop-sector-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
-  gap: var(--space-sm);
-  padding: var(--space-md) var(--space-lg);
+  grid-template-columns: repeat(11, 1fr);
+  gap: 0;
   border-bottom: 1px solid var(--rule);
   flex-shrink: 0;
 }
-
 .aesop-sector {
-  padding: var(--space-md);
-  border: 1px solid var(--rule);
+  padding: var(--sp-sm) var(--sp-xs);
+  border-right: 1px solid var(--rule-2);
   text-align: center;
-  background: var(--paper);
-  border-radius: var(--radius-sm);
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
-
-.aesop-sector:hover {
-  background: var(--paper-2);
-  border-color: var(--ink-3);
-}
-
-.aesop-sector.pos {
-  background: rgba(59, 90, 42, 0.08);
-  border-color: var(--green);
-}
-
-.aesop-sector.neg {
-  background: rgba(138, 42, 30, 0.08);
-  border-color: var(--red);
-}
-
+.aesop-sector:last-child { border-right: none; }
+.aesop-sector:hover { background: var(--paper-2); }
+.aesop-sector.pos { background: rgba(58,92,42,0.09); }
+.aesop-sector.neg { background: rgba(122,46,26,0.09); }
 .aesop-sector-label {
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 7px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   color: var(--ink-3);
-  margin-bottom: var(--space-xs);
+  margin-bottom: 2px;
   font-weight: 500;
 }
-
 .aesop-sector-value {
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
   color: var(--ink);
 }
 
-/* ============================================================================
-   CHARTS CONTAINER
-   ============================================================================ */
-
+/* ── Charts Grid — 2×4 ──────────────────────────────────────────────────────── */
 .aesop-charts-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
+  gap: 0;
   flex-shrink: 0;
 }
-
 .aesop-chart-panel {
-  border: 1px solid var(--rule);
-  background: var(--paper);
-  border-radius: var(--radius-sm);
-  padding: var(--space-md);
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  background: var(--cream);
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
 }
-
+.aesop-chart-panel:nth-child(even) { border-right: none; }
 .aesop-chart-title {
   font-family: var(--serif);
   font-size: 12px;
   font-style: italic;
   color: var(--ink-2);
-  margin: 0;
-  padding-bottom: var(--space-xs);
+  padding: var(--sp-sm) var(--sp-lg);
   border-bottom: 1px solid var(--rule-2);
+  flex-shrink: 0;
 }
-
 .aesop-chart-canvas {
-  width: 100%;
-  height: 120px;
   display: block;
+  width: 100%;
+  /* height set inline per chart */
 }
 
-/* ============================================================================
-   RIGHT RAIL SECTIONS
-   ============================================================================ */
-
+/* ── Right Rail ─────────────────────────────────────────────────────────────── */
 .aesop-right-section {
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--sp-md) var(--sp-lg);
   border-bottom: 1px solid var(--rule);
   flex-shrink: 0;
 }
-
 .aesop-right-section h3 {
   font-family: var(--serif);
   font-size: 13px;
   font-style: italic;
   color: var(--ink-2);
-  margin: 0 0 var(--space-md) 0;
-  padding-bottom: var(--space-xs);
+  margin-bottom: var(--sp-md);
+  padding-bottom: var(--sp-xs);
   border-bottom: 1px solid var(--rule-2);
 }
 
+/* Heatmap */
+.aesop-heatmap-container {
+  width: 100%;
+  background: var(--paper);
+  border-radius: 2px;
+}
+.aesop-heatmap-canvas { display: block; width: 100%; }
+
+/* List */
+.aesop-list { list-style: none; }
+.aesop-list-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--sp-md);
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rule-2);
+  align-items: center;
+}
+.aesop-list-item:last-child { border-bottom: none; }
+.aesop-list-item-label { font-family: var(--mono); font-size: 9px; color: var(--ink-3); }
+.aesop-list-item-value { font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--ink); }
+.aesop-list-item-detail { font-family: var(--mono); font-size: 8px; color: var(--ink-4); }
+
+/* Stat items */
 .aesop-stat-item {
-  margin-bottom: var(--space-md);
-  padding-bottom: var(--space-md);
+  margin-bottom: var(--sp-md);
+  padding-bottom: var(--sp-md);
   border-bottom: 1px solid var(--rule-2);
 }
-
-.aesop-stat-item:last-child {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
+.aesop-stat-item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
 .aesop-stat-item-label {
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 7px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--ink-4);
-  margin-bottom: var(--space-xs);
+  margin-bottom: 2px;
   display: block;
 }
-
 .aesop-stat-item-value {
   font-family: var(--serif);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 400;
   color: var(--ink);
   line-height: 1;
 }
-
 .aesop-stat-item-detail {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8px;
   color: var(--ink-3);
-  margin-top: var(--space-xs);
+  margin-top: 2px;
   line-height: 1.3;
 }
 
-/* ============================================================================
-   CORRELATION HEATMAP
-   ============================================================================ */
-
-.aesop-heatmap-container {
-  width: 100%;
-  height: 280px;
-  overflow: auto;
+/* ── Ticker Strip ───────────────────────────────────────────────────────────── */
+.aesop-ticker-strip {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--rule);
   background: var(--paper);
-  border-radius: var(--radius-sm);
-  margin-top: var(--space-sm);
+  height: 26px;
+  flex-shrink: 0;
 }
-
-.aesop-heatmap-canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
+.aesop-ticker-inner {
+  display: flex;
+  animation: ticker 60s linear infinite;
+  white-space: nowrap;
 }
-
-/* ============================================================================
-   LIST ITEMS
-   ============================================================================ */
-
-.aesop-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.aesop-ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 var(--sp-lg);
+  border-right: 1px solid var(--rule-2);
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink-3);
+  white-space: nowrap;
 }
+.aesop-ticker-item .ticker-sym { font-weight: 600; color: var(--ink-2); }
+.aesop-ticker-item .ticker-price { color: var(--ink); }
+.aesop-ticker-item .ticker-chg { font-weight: 500; }
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
-.aesop-list-item {
+/* ── FX Panel ───────────────────────────────────────────────────────────────── */
+.aesop-fx-item {
+  padding: var(--sp-sm) var(--sp-md);
+  border-bottom: 1px solid var(--rule-2);
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: var(--space-md);
-  padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--rule-2);
   align-items: center;
-  font-size: 10px;
+  gap: var(--sp-sm);
+  flex-shrink: 0;
 }
-
-.aesop-list-item:last-child {
-  border-bottom: none;
-}
-
-.aesop-list-item-label {
+.aesop-fx-pair {
   font-family: var(--mono);
-  color: var(--ink-3);
-}
-
-.aesop-list-item-value {
-  font-family: var(--serif);
+  font-size: 9px;
+  color: var(--ink-2);
   font-weight: 500;
+}
+.aesop-fx-rate {
+  font-family: var(--mono);
+  font-size: 10px;
   color: var(--ink);
+  text-align: right;
+}
+.aesop-fx-change {
+  font-family: var(--mono);
+  font-size: 8px;
+  text-align: right;
+  font-weight: 500;
 }
 
-/* ============================================================================
-   SCROLLBAR STYLING
-   ============================================================================ */
-
-.aesop-center::-webkit-scrollbar,
-.aesop-right-rail::-webkit-scrollbar {
-  width: 8px;
-}
-
-.aesop-center::-webkit-scrollbar-track,
-.aesop-right-rail::-webkit-scrollbar-track {
-  background: var(--cream);
-}
-
-.aesop-center::-webkit-scrollbar-thumb,
-.aesop-right-rail::-webkit-scrollbar-thumb {
-  background: var(--rule);
-  border-radius: 4px;
-}
-
-.aesop-center::-webkit-scrollbar-thumb:hover,
-.aesop-right-rail::-webkit-scrollbar-thumb:hover {
-  background: var(--ink-4);
-}
-
-/* ============================================================================
-   RESPONSIVE DESIGN
-   ============================================================================ */
-
+/* ── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 1400px) {
-  .aesop-masthead {
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-lg);
-  }
-  
-  .aesop-charts-grid {
-    grid-template-columns: 1fr;
-  }
+  .aesop-container { grid-template-columns: 180px 1fr 360px; }
 }
-
-@media (max-width: 1024px) {
-  .aesop-container {
-    grid-template-columns: 1fr;
-  }
-  
-  .aesop-center,
-  .aesop-right-rail {
-    border-right: none;
-  }
+@media (max-width: 1100px) {
+  .aesop-container { grid-template-columns: 1fr 340px; }
+  .aesop-left-rail { display: none; }
 }
-
-/* ============================================================================
-   PRINT STYLES
-   ============================================================================ */
-
-@media print {
-  .aesop-nav {
-    display: none;
-  }
-  
-  .aesop-center,
-  .aesop-right-rail {
-    overflow: visible;
-    height: auto;
-  }
+@media (max-width: 800px) {
+  .aesop-container { grid-template-columns: 1fr; }
+  .aesop-right-rail { display: none; }
 }
