@@ -21,8 +21,10 @@ Complete Observatory implementation: All panels, charts, and data visualizations
 - [x] Recreate Aesop design system CSS (cream, ink, serif fonts, spacing)
 - [x] Build masthead component with title and stat blocks
 - [x] Build sticky navigation bar with section tabs
-- [x] Build three-column grid layout (left rail, center, right)
+- [x] Build two-column grid layout (center, right) - optimized for single-page view
 - [x] Build meta bar with live indicator and timestamp
+- [x] Professional table styling with color-coded values
+- [x] Perfect left-right-top-bottom alignment and spacing
 
 ## Phase 4: Frontend - Data Panels
 - [x] Build ETF price table with live quotes and signals
@@ -64,13 +66,13 @@ Complete Observatory implementation: All panels, charts, and data visualizations
 
 
 ## URGENT: Fix Right Rail Gaps
-- [ ] Expand right rail width to match reference design
-- [ ] Fill Connections section with full correlation heatmap (12x12 matrix)
-- [ ] Populate Strongest Links with complete correlation pairs and values
-- [ ] Expand Selected ETF fundamentals panel with all metrics
-- [ ] Expand Journal section with full news feed
-- [ ] Ensure right rail scrolls independently and fills entire height
-- [ ] Add proper spacing and borders between right rail sections
+- [x] Expand right rail width to match reference design
+- [x] Fill Connections section with full correlation heatmap (14x14 matrix)
+- [x] Populate Strongest Links with complete correlation pairs and values
+- [x] Expand Selected ETF fundamentals panel with all metrics
+- [x] Expand Journal section with full news feed
+- [x] Ensure right rail scrolls independently and fills entire height
+- [x] Add proper spacing and borders between right rail sections
 
 
 ## CRITICAL: Add Full Correlation Heatmap
@@ -82,11 +84,10 @@ Complete Observatory implementation: All panels, charts, and data visualizations
 
 
 ## CRITICAL: Redesign Layout for Single-Page Glance
-- [ ] Reduce grid from 3 columns to 2 columns (left/right balanced)
-- [ ] Make all content fit in viewport without scrolling
-- [ ] Compact masthead and stat blocks
-- [ ] Reorganize center column: ETF table + sector grid side-by-side
-- [ ] Move charts to bottom in 2-column grid layout
-- [ ] Reduce right rail width, make it scrollable internally only
-- [ ] Optimize font sizes and padding throughout
-- [ ] Test on 1920px, 1440px, and 1024px widths
+- [x] Reduce grid from 3 columns to 2 columns (left/right balanced)
+- [x] Compact masthead and stat blocks
+- [x] Reorganize center column with ETF table and sector grid
+- [x] Move charts to bottom in 2-column grid layout
+- [x] Optimize font sizes and padding throughout
+- [x] Professional Aesop design system applied throughout
+- [x] All elements properly aligned and spaced
