@@ -91,3 +91,15 @@ Complete Observatory implementation: All panels, charts, and data visualizations
 - [x] Optimize font sizes and padding throughout
 - [x] Professional Aesop design system applied throughout
 - [x] All elements properly aligned and spaced
+
+
+## Navigation Tabs — Full Implementation
+- [ ] Tab I: Observatory — current main view (geographic map, radar, sectors, ETF table, charts)
+- [ ] Tab II: Regions — full regional breakdown with DM/EM/Frontier tables, sparklines, country detail
+- [ ] Tab III: Sectors — sector deep-dive with heatmap, sector rotation wheel, performance bars
+- [ ] Tab IV: Factors — factor performance dashboard (Momentum, Quality, Value, Size, Low Vol, Yield)
+- [ ] Tab V: Correlation — full-page correlation matrix + clustering + rolling correlation chart
+- [ ] Tab VI: Fundamentals — ETF fundamentals table (P/E, P/B, yield, AUM, expense ratio, flows)
+- [ ] Tab VII: Technicals — RSI, MACD, moving averages, Bollinger bands for all 14 ETFs
+- [ ] Tab VIII: Flows — fund flows, AUM changes, short interest, institutional holdings
+- [ ] Tab IX: Journal — news feed, market commentary, economic calendar

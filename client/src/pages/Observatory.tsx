@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import {
+  RegionsView,
+  SectorsView,
+  FactorsView,
+  CorrelationView,
+  FundamentalsView,
+  TechnicalsView,
+  FlowsView,
+  JournalView,
+} from "./TabViews";
+import {
   drawRadarChart,
   drawEquirectangularMap,
   drawExchangeOrbit,
@@ -365,7 +375,57 @@ export default function Observatory() {
       </div>
 
       {/* ── Main Container ───────────────────────────────────────────────── */}
-      <div className="aesop-container" style={{ flex: 1, minHeight: 0 }}>
+      <div className="aesop-container" style={{ flex: 1, minHeight: 0, overflow: activeTab === "I" ? undefined : "auto", display: activeTab === "I" ? undefined : "block" }}>
+        {/* ── Tab II: Regions ── */}
+        {activeTab === "II" && (
+          <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
+            <RegionsView etfData={etfData} regions={regions} />
+          </div>
+        )}
+        {/* ── Tab III: Sectors ── */}
+        {activeTab === "III" && (
+          <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
+            <SectorsView sectors={sectors} />
+          </div>
+        )}
+        {/* ── Tab IV: Factors ── */}
+        {activeTab === "IV" && (
+          <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
+            <FactorsView />
+          </div>
+        )}
+        {/* ── Tab V: Correlation ── */}
+        {activeTab === "V" && (
+          <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
+            <CorrelationView />
+          </div>
+        )}
+        {/* ── Tab VI: Fundamentals ── */}
+        {activeTab === "VI" && (
+          <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
+            <FundamentalsView etfData={etfData} selectedETF={selectedETF} setSelectedETF={setSelectedETF} />
+          </div>
+        )}
+        {/* ── Tab VII: Technicals ── */}
+        {activeTab === "VII" && (
+          <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
+            <TechnicalsView etfData={etfData} selectedETF={selectedETF} setSelectedETF={setSelectedETF} />
+          </div>
+        )}
+        {/* ── Tab VIII: Flows ── */}
+        {activeTab === "VIII" && (
+          <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
+            <FlowsView />
+          </div>
+        )}
+        {/* ── Tab IX: Journal ── */}
+        {activeTab === "IX" && (
+          <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
+            <JournalView />
+          </div>
+        )}
+        {/* ── Tab I: Observatory (default) ── */}
+        {activeTab === "I" && <>
 
         {/* ── Left Rail ──────────────────────────────────────────────────── */}
         <div className="aesop-left-rail">
@@ -721,6 +781,8 @@ export default function Observatory() {
             </ul>
           </div>
         </div>
+        </>
+        }
       </div>
 
       {/* ── Ticker Strip ─────────────────────────────────────────────────── */}
