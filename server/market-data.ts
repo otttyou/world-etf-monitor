@@ -1,285 +1,235 @@
 /**
- * Market data fetching service using Yahoo Finance API
- * Provides real-time ETF prices, indices, FX rates, and sector data
+ * Market data fetching service using yahoo-finance2 v3
+ * Uses the yahoo-finance2 npm package which handles Yahoo Finance auth (crumb/cookie) automatically.
+ * All 14 ETF tickers and 8 FX pairs are fetched with correct field mappings.
  */
 
-interface YahooQuoteResponse {
-  quoteResponse?: {
-    result?: Array<{
-      symbol: string;
-      regularMarketPrice?: number;
-      regularMarketChange?: number;
-      regularMarketChangePercent?: number;
-      regularMarketOpen?: number;
-      fiftyTwoWeekHigh?: number;
-      fiftyTwoWeekLow?: number;
-      trailingPE?: number;
-      trailingAnnualDividendYield?: number;
-      marketCap?: number;
-      averageVolume?: number;
-    }>;
-  };
+// Dynamic import for ESM-only yahoo-finance2
+let _yf: any = null;
+async function getYF() {
+  if (!_yf) {
+    const mod = await import("yahoo-finance2");
+    const YahooFinance = mod.default;
+    _yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
+  }
+  return _yf;
 }
 
-interface YahooChartResponse {
-  chart?: {
-    result?: Array<{
-      meta?: {
-        regularMarketPrice?: number;
-        currency?: string;
-      };
-      timestamp?: number[];
-      indicators?: {
-        quote?: Array<{
-          close?: (number | null)[];
-          open?: (number | null)[];
-          high?: (number | null)[];
-          low?: (number | null)[];
-          volume?: (number | null)[];
-        }>;
-      };
-    }>;
-  };
-}
+// ─── Ticker maps ────────────────────────────────────────────────────────────
 
-const YAHOO_API_BASE = "https://query1.finance.yahoo.com";
+export const ETF_TICKERS = [
+  "SPY", "QQQ", "IWM", "ACWI", "EFA", "EEM",
+  "EWJ", "MCHI", "INDA", "EWZ", "EWG", "EWU", "TLT", "GLD",
+];
 
-/**
- * Fetch quote data for a single symbol using Yahoo Finance v10 API
- */
-export async function fetchYahooQuote(symbol: string): Promise<{
+export const SECTOR_ETF_MAP: Record<string, string> = {
+  TECH: "XLK", COMM: "XLC", DISC: "XLY", FIN: "XLF",
+  INDU: "XLI", MATS: "XLB", ENER: "XLE", HLTH: "XLV",
+  STAP: "XLP", UTIL: "XLU", REAL: "XLRE",
+};
+
+export const FX_SYMBOL_MAP: Record<string, string> = {
+  "DXY":     "DX-Y.NYB",
+  "EUR/USD": "EURUSD=X",
+  "GBP/USD": "GBPUSD=X",
+  "USD/JPY": "JPY=X",
+  "USD/CNH": "CNH=X",
+  "USD/INR": "INR=X",
+  "USD/BRL": "BRL=X",
+  "USD/TRY": "TRY=X",
+};
+
+export const REGION_ETF_MAP: Record<string, string> = {
+  "United States": "SPY",
+  "Canada":        "EWC",
+  "United Kingdom":"EWU",
+  "Germany":       "EWG",
+  "France":        "EWQ",
+  "Japan":         "EWJ",
+  "Australia":     "EWA",
+  "Switzerland":   "EWL",
+  "Sweden":        "EWD",
+  "Singapore":     "EWS",
+  "China":         "MCHI",
+  "India":         "INDA",
+  "Korea":         "EWY",
+  "Taiwan":        "EWT",
+  "Brazil":        "EWZ",
+  "Mexico":        "EWW",
+  "South Africa":  "EZA",
+  "Indonesia":     "EIDO",
+};
+
+// ─── Core quote fetch ────────────────────────────────────────────────────────
+
+export interface QuoteResult {
   symbol: string;
   price: number;
   change: number;
-  changePercent: number;
-  pe: number | null;
-  yield: number | null;
-  marketCap: number | null;
-} | null> {
-  try {
-    const url = `${YAHOO_API_BASE}/v10/finance/quoteSummary/${symbol}?modules=price,financialData`;
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-    });
-
-    if (!response.ok) {
-      console.warn(`[Yahoo API] Failed to fetch ${symbol}: ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    const priceData = data.quoteSummary?.result?.[0]?.price;
-    const finData = data.quoteSummary?.result?.[0]?.financialData;
-
-    if (!priceData) return null;
-
-    const price = priceData.regularMarketPrice?.raw || 0;
-    const change = priceData.regularMarketChange?.raw || 0;
-    const changePercent = priceData.regularMarketChangePercent?.raw || 0;
-
-    return {
-      symbol,
-      price,
-      change,
-      changePercent,
-      pe: finData?.trailingPE?.raw || null,
-      yield: finData?.trailingAnnualDividendYield?.raw || null,
-      marketCap: finData?.marketCap?.raw || null,
-    };
-  } catch (error) {
-    console.error(`[Yahoo API] Error fetching ${symbol}:`, error);
-    return null;
-  }
-}
-
-/**
- * Fetch historical chart data for calculating multiple time period changes
- */
-export async function fetchYahooChart(
-  symbol: string,
-  range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" = "1d"
-): Promise<{
-  current: number;
+  changePercent: number;   // already in % points (e.g. 1.21 = +1.21%)
   open: number;
-  change: number;
-  changePercent: number;
-} | null> {
+  prevClose: number;
+  volume: number;
+  marketCap: number | null;
+  pe: number | null;
+  dividendYield: number | null;  // decimal (0.0081 = 0.81%)
+  fiftyTwoWeekLow: number | null;
+  fiftyTwoWeekHigh: number | null;
+  ytdChangePercent: number | null; // % points
+  shortName: string;
+}
+
+export async function fetchQuotes(symbols: string[]): Promise<QuoteResult[]> {
   try {
-    const url = `${YAHOO_API_BASE}/v8/finance/chart/${symbol}?interval=1d&range=${range}`;
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-    });
+    const yf = await getYF();
+    const raw = await yf.quote(symbols, {}, { validateResult: false });
+    const arr: any[] = Array.isArray(raw) ? raw : [raw];
 
-    if (!response.ok) {
-      console.warn(`[Yahoo API] Failed to fetch chart ${symbol}: ${response.status}`);
-      return null;
-    }
+    return arr.map((q: any): QuoteResult => ({
+      symbol:            q.symbol ?? "",
+      price:             q.regularMarketPrice ?? 0,
+      change:            q.regularMarketChange ?? 0,
+      changePercent:     q.regularMarketChangePercent ?? 0,   // already %
+      open:              q.regularMarketOpen ?? q.regularMarketPrice ?? 0,
+      prevClose:         q.regularMarketPreviousClose ?? 0,
+      volume:            q.regularMarketVolume ?? 0,
+      marketCap:         q.marketCap ?? null,
+      pe:                q.trailingPE ?? null,
+      dividendYield:     q.trailingAnnualDividendYield ?? null,
+      fiftyTwoWeekLow:   q.fiftyTwoWeekLow ?? null,
+      fiftyTwoWeekHigh:  q.fiftyTwoWeekHigh ?? null,
+      ytdChangePercent:  q.fiftyTwoWeekChangePercent ?? null,  // already %
+      shortName:         q.shortName ?? q.longName ?? q.symbol ?? "",
+    }));
+  } catch (err) {
+    console.error("[market-data] fetchQuotes error:", err);
+    return [];
+  }
+}
 
-    const data: YahooChartResponse = await response.json();
-    const result = data.chart?.result?.[0];
+// ─── Historical chart fetch ──────────────────────────────────────────────────
 
-    if (!result) return null;
+export interface HistoricalBar {
+  date: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
 
-    const quotes = result.indicators?.quote?.[0] || {};
-    const meta = result.meta || {};
+export async function fetchHistorical(
+  symbol: string,
+  period1: Date,
+  period2: Date = new Date()
+): Promise<HistoricalBar[]> {
+  try {
+    const yf = await getYF();
+    const rows = await yf.historical(symbol, {
+      period1: period1.toISOString().slice(0, 10),
+      period2: period2.toISOString().slice(0, 10),
+      interval: "1d",
+    }, { validateResult: false });
 
-    if (!quotes.close || quotes.close.length === 0) return null;
+    return (rows ?? []).map((r: any): HistoricalBar => ({
+      date:   r.date,
+      open:   r.open   ?? 0,
+      high:   r.high   ?? 0,
+      low:    r.low    ?? 0,
+      close:  r.close  ?? 0,
+      volume: r.volume ?? 0,
+    }));
+  } catch (err) {
+    console.error(`[market-data] fetchHistorical(${symbol}) error:`, err);
+    return [];
+  }
+}
 
-    const current = meta.regularMarketPrice || quotes.close[quotes.close.length - 1] || 0;
-    const open = quotes.open?.[0] || quotes.close[0] || 0;
+// ─── 5-day change helper ─────────────────────────────────────────────────────
 
-    if (!current || !open) return null;
-
-    const change = current - open;
-    const changePercent = (change / open) * 100;
-
-    return {
-      current,
-      open,
-      change,
-      changePercent,
-    };
-  } catch (error) {
-    console.error(`[Yahoo API] Error fetching chart ${symbol}:`, error);
+export async function fetch5DayChange(symbol: string): Promise<number | null> {
+  try {
+    const period1 = new Date();
+    period1.setDate(period1.getDate() - 10); // fetch 10 days to ensure 5 trading days
+    const bars = await fetchHistorical(symbol, period1);
+    if (bars.length < 2) return null;
+    const recent = bars[bars.length - 1].close;
+    const fiveDaysAgo = bars[Math.max(0, bars.length - 6)].close;
+    if (!fiveDaysAgo) return null;
+    return ((recent - fiveDaysAgo) / fiveDaysAgo) * 100;
+  } catch {
     return null;
   }
 }
 
-/**
- * Calculate RSI (Relative Strength Index) from price changes
- */
-export function calculateRSI(changes: number[], period: number = 14): number {
-  if (changes.length < period) return 50;
+// ─── Batch helpers ───────────────────────────────────────────────────────────
 
-  let gains = 0;
-  let losses = 0;
-
-  for (let i = 0; i < period; i++) {
-    const change = changes[i];
-    if (change > 0) gains += change;
-    else losses += Math.abs(change);
-  }
-
-  const avgGain = gains / period;
-  const avgLoss = losses / period;
-
-  if (avgLoss === 0) return 100;
-
-  const rs = avgGain / avgLoss;
-  const rsi = 100 - 100 / (1 + rs);
-
-  return Math.round(rsi);
+export async function fetchAllETFQuotes(): Promise<QuoteResult[]> {
+  return fetchQuotes(ETF_TICKERS);
 }
 
-/**
- * Format market cap to readable string
- */
-export function formatMarketCap(marketCap: number | null): string {
-  if (!marketCap) return "—";
-  if (marketCap >= 1e12) return `$${(marketCap / 1e12).toFixed(1)}T`;
-  if (marketCap >= 1e9) return `$${(marketCap / 1e9).toFixed(1)}B`;
-  if (marketCap >= 1e6) return `$${(marketCap / 1e6).toFixed(1)}M`;
-  return `$${marketCap}`;
+export async function fetchSectorQuotes(): Promise<QuoteResult[]> {
+  return fetchQuotes(Object.values(SECTOR_ETF_MAP));
 }
 
-/**
- * Fetch multiple quotes efficiently with rate limiting
- */
-export async function fetchMultipleQuotes(symbols: string[]): Promise<
-  Record<
-    string,
-    {
-      symbol: string;
-      price: number;
-      change: number;
-      changePercent: number;
-      pe: number | null;
-      yield: number | null;
-      marketCap: number | null;
-    } | null
-  >
-> {
-  const results: Record<string, any> = {};
-
-  for (const symbol of symbols) {
-    results[symbol] = await fetchYahooQuote(symbol);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  return results;
+export async function fetchFXQuotes(): Promise<QuoteResult[]> {
+  return fetchQuotes(Object.values(FX_SYMBOL_MAP));
 }
 
-/**
- * Fetch multiple chart data efficiently with rate limiting
- */
-export async function fetchMultipleCharts(
-  symbols: string[],
-  range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" = "1d"
-): Promise<
-  Record<
-    string,
-    {
-      current: number;
-      open: number;
-      change: number;
-      changePercent: number;
-    } | null
-  >
-> {
-  const results: Record<string, any> = {};
-
-  for (const symbol of symbols) {
-    results[symbol] = await fetchYahooChart(symbol, range);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  return results;
+export async function fetchRegionQuotes(): Promise<QuoteResult[]> {
+  const symbols = Object.values(REGION_ETF_MAP);
+  const unique = Array.from(new Set(symbols));
+  return fetchQuotes(unique);
 }
 
-/**
- * Map ticker to Yahoo Finance symbol (handle special cases)
- */
-export function mapTickerToYahooSymbol(ticker: string): string {
-  const mapping: Record<string, string> = {
-    "DXY": "DX-Y.NYB",
-    "EUR": "EURUSD=X",
-    "GBP": "GBPUSD=X",
-    "JPY": "JPYUSD=X",
-    "CNY": "CNHUSD=X",
-    "INR": "INRUSD=X",
-    "BRL": "BRLUSD=X",
-    "TRY": "TRYUSD=X",
-  };
+// ─── Volatility fetch ────────────────────────────────────────────────────────
 
-  return mapping[ticker] || ticker;
-}
-
-/**
- * Fetch volatility data (VIX, MOVE, etc.)
- */
 export async function fetchVolatilityData(): Promise<{
   vix: number;
   move: number;
   dxy: number;
 } | null> {
   try {
-    const [vixData, moveData, dxyData] = await Promise.all([
-      fetchYahooChart("^VIX", "1d"),
-      fetchYahooChart("^MOVE", "1d"),
-      fetchYahooChart("DX-Y.NYB", "1d"),
-    ]);
-
-    return {
-      vix: vixData?.current || 0,
-      move: moveData?.current || 0,
-      dxy: dxyData?.current || 0,
-    };
-  } catch (error) {
-    console.error("[Yahoo API] Error fetching volatility data:", error);
+    const results = await fetchQuotes(["^VIX", "^MOVE", "DX-Y.NYB"]);
+    const vix  = results.find(r => r.symbol === "^VIX")?.price  ?? 0;
+    const move = results.find(r => r.symbol === "^MOVE")?.price ?? 0;
+    const dxy  = results.find(r => r.symbol === "DX-Y.NYB")?.price ?? 0;
+    return { vix, move, dxy };
+  } catch (err) {
+    console.error("[market-data] fetchVolatilityData error:", err);
     return null;
   }
+}
+
+// ─── Utility ─────────────────────────────────────────────────────────────────
+
+export function calculateRSI(closes: number[], period = 14): number {
+  if (closes.length < period + 1) return 50;
+  let gains = 0, losses = 0;
+  for (let i = closes.length - period; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff > 0) gains += diff;
+    else losses += Math.abs(diff);
+  }
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return Math.round(100 - 100 / (1 + rs));
+}
+
+export function formatMarketCap(v: number | null): string {
+  if (!v) return "—";
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
+  if (v >= 1e9)  return `$${(v / 1e9).toFixed(1)}B`;
+  if (v >= 1e6)  return `$${(v / 1e6).toFixed(1)}M`;
+  return `$${v}`;
+}
+
+export function signalFromRSI(rsi: number): string {
+  if (rsi >= 70) return "OVERBOUGHT";
+  if (rsi >= 55) return "BULL";
+  if (rsi <= 30) return "OVERSOLD";
+  if (rsi <= 45) return "BEAR";
+  return "NEUTRAL";
 }

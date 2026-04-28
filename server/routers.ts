@@ -13,12 +13,37 @@ import {
   upsertFXRate,
   upsertSectorData,
 } from "./db";
+
 import {
-  fetchYahooChart,
-  fetchYahooQuote,
-  mapTickerToYahooSymbol,
+  fetchAllETFQuotes,
+  fetchSectorQuotes,
+  fetchFXQuotes,
+  fetchRegionQuotes,
+  fetchHistorical,
+  fetchVolatilityData,
   formatMarketCap,
+  calculateRSI,
+  signalFromRSI,
+  SECTOR_ETF_MAP,
+  FX_SYMBOL_MAP,
+  REGION_ETF_MAP,
 } from "./market-data";
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function ytdStart(): Date {
+  const d = new Date();
+  d.setMonth(0, 1);
+  return d;
+}
+
+function daysAgo(n: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d;
+}
+
+// ─── Router ──────────────────────────────────────────────────────────────────
 
 export const appRouter = router({
   system: systemRouter,
@@ -27,228 +52,151 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      return { success: true } as const;
     }),
   }),
 
   market: router({
-    // Fetch all ETF prices
-    etfPrices: publicProcedure.query(async () => {
-      return await getAllETFPrices();
-    }),
+    // ── Read (cached) ─────────────────────────────────────────────────────
+    etfPrices: publicProcedure.query(async () => getAllETFPrices()),
+    regionalIndices: publicProcedure.query(async () => getAllRegionalIndices()),
+    fxRates: publicProcedure.query(async () => getAllFXRates()),
+    sectorData: publicProcedure.query(async () => getAllSectorData()),
 
-    // Refresh ETF data from Yahoo Finance with real data
+    // ── Refresh ETFs ──────────────────────────────────────────────────────
     refreshETFData: publicProcedure.mutation(async () => {
-      const etfTickers = [
-        "SPY",
-        "QQQ",
-        "IWM",
-        "ACWI",
-        "EFA",
-        "EEM",
-        "EWJ",
-        "MCHI",
-        "INDA",
-        "EWZ",
-        "EWG",
-        "EWU",
-        "TLT",
-        "GLD",
-      ];
+      const quotes = await fetchAllETFQuotes();
+      const results: { ticker: string; success: boolean; reason?: string }[] = [];
 
-      const results = [];
-
-      for (const ticker of etfTickers) {
+      for (const q of quotes) {
         try {
-          // Fetch quote data (price, P/E, yield)
-          const quoteData = await fetchYahooQuote(ticker);
-
-          // Fetch 1-day change
-          const d1Data = await fetchYahooChart(ticker, "1d");
-          // Fetch 5-day change
-          const d5Data = await fetchYahooChart(ticker, "5d");
-          // Fetch YTD change
-          const ytdData = await fetchYahooChart(ticker, "1y");
-
-          if (d1Data && d5Data && ytdData && quoteData) {
-            const d1Pct = d1Data.changePercent.toFixed(2);
-            const d5Pct = d5Data.changePercent.toFixed(2);
-            const ytdPct = ytdData.changePercent.toFixed(2);
-
-            // Determine signal based on 1D change
-            const signal =
-              d1Data.changePercent > 0.5
-                ? "Bullish"
-                : d1Data.changePercent < -0.5
-                  ? "Bearish"
-                  : "Neutral";
-
-            // Mock RSI (in production would calculate from historical data)
-            const rsi = Math.floor(Math.random() * 40) + 40;
-
-            await upsertETFPrice({
-              ticker,
-              name: ticker,
-              price: d1Data.current.toFixed(2),
-              d1: d1Pct,
-              d5: d5Pct,
-              ytd: ytdPct,
-              pe: quoteData.pe ? quoteData.pe.toFixed(1) + "×" : "—",
-              yld: quoteData.yield ? (quoteData.yield * 100).toFixed(2) + "%" : "—",
-              aum: formatMarketCap(quoteData.marketCap),
-              signal,
-              rsi,
-              vol: (Math.random() * 20 + 5).toFixed(1) + "%",
-            });
-
-            results.push({ ticker, success: true });
-          } else {
-            results.push({ ticker, success: false, reason: "Missing data" });
+          // Fetch 5-day historical to compute 5D change
+          const bars = await fetchHistorical(q.symbol, daysAgo(12));
+          let d5Pct = 0;
+          if (bars.length >= 6) {
+            const recent = bars[bars.length - 1].close;
+            const fiveBack = bars[Math.max(0, bars.length - 6)].close;
+            if (fiveBack) d5Pct = ((recent - fiveBack) / fiveBack) * 100;
           }
-        } catch (error) {
-          console.error(`Failed to refresh ${ticker}:`, error);
-          results.push({ ticker, success: false, error: String(error) });
-        }
 
-        // Rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 150));
+          // Compute RSI from recent closes
+          const closes = bars.map((b) => b.close);
+          const rsi = closes.length >= 15 ? calculateRSI(closes) : 50;
+          const signal = signalFromRSI(rsi);
+
+          await upsertETFPrice({
+            ticker:  q.symbol,
+            name:    q.shortName || q.symbol,
+            price:   q.price.toFixed(2),
+            d1:      q.changePercent.toFixed(2),
+            d5:      d5Pct.toFixed(2),
+            ytd:     (q.ytdChangePercent ?? 0).toFixed(2),
+            pe:      q.pe ? q.pe.toFixed(1) + "×" : "—",
+            yld:     q.dividendYield ? (q.dividendYield * 100).toFixed(2) + "%" : "—",
+            aum:     formatMarketCap(q.marketCap),
+            signal,
+            rsi,
+            vol:     "—",
+          });
+
+          results.push({ ticker: q.symbol, success: true });
+        } catch (err) {
+          console.error(`[router] refreshETFData ${q.symbol}:`, err);
+          results.push({ ticker: q.symbol, success: false, reason: String(err) });
+        }
       }
 
       return results;
     }),
 
-    // Fetch all regional indices
-    regionalIndices: publicProcedure.query(async () => {
-      return await getAllRegionalIndices();
-    }),
-
-    // Refresh regional index data with real ETF data
+    // ── Refresh Regions ───────────────────────────────────────────────────
     refreshRegionalData: publicProcedure.mutation(async () => {
-      const regions = [
-        // Developed Markets
-        { code: "US", name: "United States", etf: "SPY", region: "DM" },
-        { code: "JP", name: "Japan", etf: "EWJ", region: "DM" },
-        { code: "DE", name: "Germany", etf: "EWG", region: "DM" },
-        { code: "UK", name: "United Kingdom", etf: "EWU", region: "DM" },
-        { code: "CH", name: "Switzerland", etf: "EWL", region: "DM" },
-        { code: "SE", name: "Sweden", etf: "EWD", region: "DM" },
-        { code: "AU", name: "Australia", etf: "EWA", region: "DM" },
-        { code: "SG", name: "Singapore", etf: "EWS", region: "DM" },
-        // Emerging Markets
-        { code: "CN", name: "China", etf: "MCHI", region: "EM" },
-        { code: "IN", name: "India", etf: "INDA", region: "EM" },
-        { code: "KR", name: "Korea", etf: "EWY", region: "EM" },
-        { code: "TW", name: "Taiwan", etf: "EWT", region: "EM" },
-        { code: "BR", name: "Brazil", etf: "EWZ", region: "EM" },
-        { code: "MX", name: "Mexico", etf: "EWW", region: "EM" },
-        { code: "ZA", name: "South Africa", etf: "EZA", region: "EM" },
-        { code: "TR", name: "Türkiye", etf: "TUR", region: "EM" },
-        { code: "SA", name: "Saudi Arabia", etf: "KSA", region: "EM" },
-        { code: "ID", name: "Indonesia", etf: "EIDO", region: "EM" },
+      const regionMeta: { code: string; name: string; region: string }[] = [
+        { code: "US", name: "United States",  region: "DM" },
+        { code: "CA", name: "Canada",          region: "DM" },
+        { code: "UK", name: "United Kingdom",  region: "DM" },
+        { code: "DE", name: "Germany",         region: "DM" },
+        { code: "FR", name: "France",          region: "DM" },
+        { code: "JP", name: "Japan",           region: "DM" },
+        { code: "AU", name: "Australia",       region: "DM" },
+        { code: "CH", name: "Switzerland",     region: "DM" },
+        { code: "SE", name: "Sweden",          region: "DM" },
+        { code: "SG", name: "Singapore",       region: "DM" },
+        { code: "CN", name: "China",           region: "EM" },
+        { code: "IN", name: "India",           region: "EM" },
+        { code: "KR", name: "Korea",           region: "EM" },
+        { code: "TW", name: "Taiwan",          region: "EM" },
+        { code: "BR", name: "Brazil",          region: "EM" },
+        { code: "MX", name: "Mexico",          region: "EM" },
+        { code: "ZA", name: "South Africa",    region: "EM" },
+        { code: "ID", name: "Indonesia",       region: "EM" },
       ];
 
-      for (const region of regions) {
-        try {
-          const chartData = await fetchYahooChart(region.etf, "1d");
-          if (chartData) {
-            const d1 = chartData.changePercent.toFixed(2);
-            await upsertRegionalIndex({
-              code: region.code,
-              name: region.name,
-              d1,
-              region: region.region,
-            });
-          }
-        } catch (error) {
-          console.error(`Failed to refresh region ${region.code}:`, error);
-        }
+      const quotes = await fetchRegionQuotes();
+      const quoteMap = new Map(quotes.map((q) => [q.symbol, q]));
 
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      for (const meta of regionMeta) {
+        const etf = REGION_ETF_MAP[meta.name];
+        const q = etf ? quoteMap.get(etf) : undefined;
+        if (q) {
+          await upsertRegionalIndex({
+            code:   meta.code,
+            name:   meta.name,
+            d1:     q.changePercent.toFixed(2),
+            region: meta.region,
+          });
+        }
       }
 
       return { success: true };
     }),
 
-    // Fetch all FX rates
-    fxRates: publicProcedure.query(async () => {
-      return await getAllFXRates();
-    }),
-
-    // Refresh FX rate data with real data
+    // ── Refresh FX ────────────────────────────────────────────────────────
     refreshFXData: publicProcedure.mutation(async () => {
-      const fxPairs = [
-        { pair: "DXY", symbol: "DX-Y.NYB", label: "USD Index" },
-        { pair: "EUR/USD", symbol: "EURUSD=X", label: "EUR/USD" },
-        { pair: "GBP/USD", symbol: "GBPUSD=X", label: "GBP/USD" },
-        { pair: "USD/JPY", symbol: "JPYUSD=X", label: "USD/JPY" },
-        { pair: "USD/CNH", symbol: "CNHUSD=X", label: "USD/CNH" },
-        { pair: "USD/INR", symbol: "INRUSD=X", label: "USD/INR" },
-        { pair: "USD/BRL", symbol: "BRLUSD=X", label: "USD/BRL" },
-        { pair: "USD/TRY", symbol: "TRYUSD=X", label: "USD/TRY" },
-      ];
+      const quotes = await fetchFXQuotes();
 
-      for (const fx of fxPairs) {
-        try {
-          const data = await fetchYahooChart(fx.symbol, "1d");
+      // Build reverse map: yahoo symbol → display pair name
+      const reverseMap: Record<string, string> = {};
+      for (const [pair, sym] of Object.entries(FX_SYMBOL_MAP)) {
+        reverseMap[sym] = pair;
+      }
 
-          if (data) {
-            await upsertFXRate({
-              pair: fx.pair,
-              rate: data.current.toFixed(4),
-              d1: data.changePercent.toFixed(2),
-            });
-          }
-        } catch (error) {
-          console.error(`Failed to refresh FX ${fx.pair}:`, error);
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      for (const q of quotes) {
+        const pair = reverseMap[q.symbol] ?? q.symbol;
+        await upsertFXRate({
+          pair,
+          rate: q.price.toFixed(4),
+          d1:   q.changePercent.toFixed(2),
+        });
       }
 
       return { success: true };
     }),
 
-    // Fetch all sector data
-    sectorData: publicProcedure.query(async () => {
-      return await getAllSectorData();
-    }),
-
-    // Refresh sector data with real sector ETF data
+    // ── Refresh Sectors ───────────────────────────────────────────────────
     refreshSectorData: publicProcedure.mutation(async () => {
-      const sectorETFs = [
-        { sector: "TECH", etf: "XLK" },
-        { sector: "COMM", etf: "XLY" },
-        { sector: "DISC", etf: "XLY" },
-        { sector: "FIN", etf: "XLF" },
-        { sector: "INDU", etf: "XLI" },
-        { sector: "MATS", etf: "XLB" },
-        { sector: "ENER", etf: "XLE" },
-        { sector: "HLTH", etf: "XLV" },
-        { sector: "STAP", etf: "XLP" },
-        { sector: "UTIL", etf: "XLU" },
-        { sector: "REAL", etf: "XLRE" },
-      ];
+      const quotes = await fetchSectorQuotes();
 
-      for (const sectorInfo of sectorETFs) {
-        try {
-          const chartData = await fetchYahooChart(sectorInfo.etf, "1d");
-          if (chartData) {
-            const value = chartData.changePercent.toFixed(2);
-            await upsertSectorData({
-              sector: sectorInfo.sector,
-              value,
-            });
-          }
-        } catch (error) {
-          console.error(`Failed to refresh sector ${sectorInfo.sector}:`, error);
-        }
+      // Reverse map: ETF symbol → sector label
+      const reverseMap: Record<string, string> = {};
+      for (const [sector, etf] of Object.entries(SECTOR_ETF_MAP)) {
+        reverseMap[etf] = sector;
+      }
 
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      for (const q of quotes) {
+        const sector = reverseMap[q.symbol] ?? q.symbol;
+        await upsertSectorData({
+          sector,
+          value: q.changePercent.toFixed(2),
+        });
       }
 
       return { success: true };
+    }),
+
+    // ── Volatility data ───────────────────────────────────────────────────
+    volatility: publicProcedure.query(async () => {
+      return await fetchVolatilityData();
     }),
   }),
 });

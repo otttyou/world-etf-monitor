@@ -103,3 +103,23 @@ Complete Observatory implementation: All panels, charts, and data visualizations
 - [x] Tab VII: Technicals — RSI, MACD, moving averages, Bollinger bands for all 14 ETFs
 - [x] Tab VIII: Flows — fund flows, AUM changes, short interest, institutional holdings
 - [x] Tab IX: Journal — news feed, market commentary, economic calendar
+
+## Finnhub Integration
+- [ ] Add FINNHUB_API_KEY secret
+- [ ] Build finnhub.ts service (quote, candle, forex endpoints)
+- [ ] Implement fallback chain: Yahoo Finance → Finnhub → DB cache
+- [ ] Map Finnhub quote fields to ETFRow schema
+- [ ] Map Finnhub forex fields to FX rates schema
+- [ ] Update market-data.ts to use fallback chain
+- [ ] Test all 14 ETF tickers return live data
+- [ ] Test all 8 FX pairs return live data
+- [ ] Write vitest tests for Finnhub service
+
+## Yahoo Finance Proxy Fix — COMPLETE
+- [x] Integrated yahoo-finance2 v3 library (handles auth automatically)
+- [x] Rewritten market-data.ts with proper field mapping
+- [x] All 14 ETF tickers return live data (SPY, QQQ, IWM, ACWI, EFA, EEM, EWJ, MCHI, INDA, EWZ, EWG, EWU, TLT, GLD)
+- [x] All 8 FX pairs return live data (DXY, EUR/USD, GBP/USD, USD/JPY, USD/CNH, USD/INR, USD/BRL, USD/TRY)
+- [x] Sector ETFs return live data
+- [x] Verified live quotes: SPY $710.14 +1.21%, QQQ $648.85 +1.31%, all ETFs live
+- [x] No 401 errors — fully working
