@@ -108,7 +108,7 @@ export interface MarketSnapshot {
   fx: LiveFX[];
   sectors: LiveSector[];
   factors: LiveFactor[];
-  volatility: { vix: number; move: number; dxy: number } | null;
+  volatility: { vix: number; tyvix: number; vix1y: number; dxy: number; vixChangePercent: number } | null;
   correlation: { tickers: string[]; matrix: number[][] };
   radar: RadarAxes;
   priorRadar: RadarAxes;

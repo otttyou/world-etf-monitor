@@ -253,9 +253,9 @@ export default function Observatory() {
   useEffect(() => {
     if (!moonCanvasRef.current) return;
     const vix = vol?.vix ?? 0;
-    const move = vol?.move ?? 0;
+    const tyvix = vol?.tyvix ?? 0;
     const dxy = vol?.dxy ?? 0;
-    drawVolatilityMoon(moonCanvasRef.current, vix, move, dxy, vixPhase(vix));
+    drawVolatilityMoon(moonCanvasRef.current, vix, tyvix, dxy, vixPhase(vix));
   }, [vol]);
 
   useEffect(() => {
@@ -280,10 +280,21 @@ export default function Observatory() {
 
   useEffect(() => {
     if (!volatilityCanvasRef.current) return;
-    const vix = vol?.vix ?? 0;
-    const term = [vix, vix * 0.97, vix * 0.95, vix * 0.93, vix * 0.92, vix * 0.91];
-    const prior = term.map(v => v * 1.04);
-    drawVolatilityCurve(volatilityCanvasRef.current, term, prior);
+    // Real VIX term structure anchored on live quotes: ^VIX (spot, ~1M) and
+    // ^VIX1Y (CBOE S&P 500 One-Year Volatility). We interpolate linearly
+    // between the two real points and extend the same slope to 24M, instead
+    // of fabricating the curve from VIX with arbitrary scaling factors.
+    const vixSpot = vol?.vix ?? 0;
+    const vix1y = vol?.vix1y && vol.vix1y > 0 ? vol.vix1y : vixSpot;
+    const vixChange = vol?.vixChangePercent ?? 0;
+    // Term points in months: 1, 3, 6, 12, 18, 24
+    const months = [1, 3, 6, 12, 18, 24];
+    const slope = (vix1y - vixSpot) / 11; // per month, from 1M to 12M
+    const current = months.map((m) => vixSpot + slope * (m - 1));
+    // Prior-session curve = current shifted by VIX's 1D change (real data).
+    const priorShift = vixChange / 100;
+    const prior = current.map((v) => v / (1 + priorShift));
+    drawVolatilityCurve(volatilityCanvasRef.current, current, prior);
   }, [vol]);
 
   useEffect(() => {
@@ -393,7 +404,7 @@ export default function Observatory() {
         {/* ── Tab V: Correlation ── */}
         {activeTab === "V" && (
           <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
-            <CorrelationView correlation={correlationQ.data} />
+            <CorrelationView correlation={correlationQ.data} volatility={volatilityQ.data} />
           </div>
         )}
         {/* ── Tab VI: Fundamentals ── */}
@@ -539,7 +550,7 @@ export default function Observatory() {
                   { label: "RISK", val: (radarQ.data?.current.growth ?? 0) >= 0 ? "On" : "Off", sub: `growth ${(radarQ.data?.current.growth ?? 0).toFixed(2)}` },
                   { label: "DURATION", val: (radarQ.data?.current.rates ?? 0) >= 0 ? "Long" : "Short", sub: `TLT axis ${(radarQ.data?.current.rates ?? 0).toFixed(2)}` },
                   { label: "BREADTH", val: advancers > (etfData.length / 2) ? "Widening" : "Narrow", sub: `${advancers}/${etfData.length || 0} advancers` },
-                  { label: "VOLATILITY", val: (vol?.vix ?? 0) < 20 ? "Subdued" : "Elevated", sub: `VIX ${(vol?.vix ?? 0).toFixed(1)} · MOVE ${(vol?.move ?? 0).toFixed(0)}` },
+                  { label: "VOLATILITY", val: (vol?.vix ?? 0) < 20 ? "Subdued" : "Elevated", sub: `VIX ${(vol?.vix ?? 0).toFixed(1)} · TYVIX ${(vol?.tyvix ?? 0).toFixed(2)}` },
                 ].map((s, i) => (
                   <div key={i}>
                     <div style={{ fontFamily: "var(--mono)", fontSize: "7px", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--ink-4)", marginBottom: "2px" }}>{s.label}</div>

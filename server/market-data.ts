@@ -194,18 +194,43 @@ export async function fetchRegionQuotes(): Promise<QuoteResult[]> {
 }
 
 // ─── Volatility fetch ────────────────────────────────────────────────────────
+// Yahoo does not list the ICE BofA MOVE Index — the "^MOVE" symbol there is the
+// "Northern Trust iBoxx 5-Year Tar" bond fund, NOT a volatility index. Use the
+// CBOE/CBOT 10-Year Treasury Volatility Index (^TYVIX) as the real rates-vol
+// proxy, and ^VIX1Y (CBOE S&P 500 One-Year Volatility) to anchor the term
+// structure curve on real data instead of fabricated scaling factors.
 
-export async function fetchVolatilityData(): Promise<{
+export const VOL_SYMBOLS = {
+  vix:    "^VIX",
+  tyvix:  "^TYVIX",
+  vix1y:  "^VIX1Y",
+  dxy:    "DX-Y.NYB",
+} as const;
+
+export interface VolatilityData {
   vix: number;
-  move: number;
+  tyvix: number;
+  vix1y: number;
   dxy: number;
-} | null> {
+  vixChangePercent: number;
+}
+
+export async function fetchVolatilityData(): Promise<VolatilityData | null> {
   try {
-    const results = await fetchQuotes(["^VIX", "^MOVE", "DX-Y.NYB"]);
-    const vix  = results.find(r => r.symbol === "^VIX")?.price  ?? 0;
-    const move = results.find(r => r.symbol === "^MOVE")?.price ?? 0;
-    const dxy  = results.find(r => r.symbol === "DX-Y.NYB")?.price ?? 0;
-    return { vix, move, dxy };
+    const results = await fetchQuotes(Object.values(VOL_SYMBOLS));
+    const find = (sym: string) => results.find(r => r.symbol === sym);
+    const vix   = find(VOL_SYMBOLS.vix);
+    const tyvix = find(VOL_SYMBOLS.tyvix);
+    const vix1y = find(VOL_SYMBOLS.vix1y);
+    const dxy   = find(VOL_SYMBOLS.dxy);
+    if (!vix) return null;
+    return {
+      vix:   vix.price ?? 0,
+      tyvix: tyvix?.price ?? 0,
+      vix1y: vix1y?.price ?? vix.price ?? 0,
+      dxy:   dxy?.price ?? 0,
+      vixChangePercent: vix.changePercent ?? 0,
+    };
   } catch (err) {
     console.error("[market-data] fetchVolatilityData error:", err);
     return null;

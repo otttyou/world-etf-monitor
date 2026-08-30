@@ -145,6 +145,21 @@ describe("Market Data Procedures", () => {
       expect(result[0]).toHaveProperty("ticker");
       expect(result[0]).toHaveProperty("d1");
     });
+
+    it("should return real volatility indices, not a bond fund price", async () => {
+      const result = await caller.market.volatility();
+      expect(result).not.toBeNull();
+      // ^VIX is a real vol index, typically 10–80
+      expect(result!.vix).toBeGreaterThan(5);
+      expect(result!.vix).toBeLessThan(100);
+      // ^TYVIX (10Y Treasury vol) is a real rates-vol index (~2–15); the old
+      // "^MOVE" symbol returned ~70.97 (a bond fund price), which we must not see.
+      expect(result!.tyvix).toBeGreaterThan(0);
+      expect(result!.tyvix).toBeLessThan(50);
+      expect(result!.tyvix).not.toBeCloseTo(70.97, 1);
+      // ^VIX1Y anchors the term structure (real 1-year vol, ~15–40)
+      expect(result!.vix1y).toBeGreaterThan(result!.vix - 5);
+    });
   });
 
   describe("Data Validation", () => {

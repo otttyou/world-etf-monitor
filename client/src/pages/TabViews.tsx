@@ -535,8 +535,10 @@ export function FactorsView({
 // ─── TAB V: CORRELATION ──────────────────────────────────────────────────────
 export function CorrelationView({
   correlation,
+  volatility,
 }: {
   correlation?: { tickers: string[]; matrix: number[][] };
+  volatility?: { vix: number; vix1y: number; vixChangePercent: number } | null;
 }) {
   const heatmapRef = useRef<HTMLCanvasElement>(null);
   const curveRef   = useRef<HTMLCanvasElement>(null);
@@ -548,8 +550,16 @@ export function CorrelationView({
   }, [matrix]);
 
   useEffect(() => {
-    if (curveRef.current) drawVolatilityCurve(curveRef.current, [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]);
-  }, []);
+    if (!curveRef.current) return;
+    const vixSpot = volatility?.vix ?? 0;
+    const vix1y = volatility?.vix1y && volatility.vix1y > 0 ? volatility.vix1y : vixSpot;
+    const vixChange = volatility?.vixChangePercent ?? 0;
+    const months = [1, 3, 6, 12, 18, 24];
+    const slope = (vix1y - vixSpot) / 11;
+    const current = months.map((m) => vixSpot + slope * (m - 1));
+    const prior = current.map((v) => v / (1 + vixChange / 100));
+    drawVolatilityCurve(curveRef.current, current, prior);
+  }, [volatility]);
 
   const strongLinks = useMemo(
     () => strongestLinks(tickers, matrix, 12),

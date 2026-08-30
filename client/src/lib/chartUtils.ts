@@ -359,7 +359,7 @@ export function drawExchangeOrbit(
 export function drawVolatilityMoon(
   canvas: HTMLCanvasElement,
   vix: number,
-  move: number,
+  tyvix: number,
   dxy: number,
   phase: string
 ) {
@@ -416,7 +416,7 @@ export function drawVolatilityMoon(
   // Stats row
   const stats = [
     { label: "VIX", value: vix.toFixed(1) },
-    { label: "MOVE", value: move.toFixed(0) },
+    { label: "TYVIX", value: tyvix.toFixed(2) },
     { label: "DXY σ", value: dxy.toFixed(2) },
   ];
   const statY = h - 32;
