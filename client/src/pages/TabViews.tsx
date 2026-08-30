@@ -4,6 +4,7 @@
  */
 import { useRef, useEffect, useMemo } from "react";
 import { drawRadarChart, drawCorrelationHeatmap, drawVolatilityCurve, drawLiquidityDepth, type RadarData } from "@/lib/chartUtils";
+import { isDevelopedRegion, isEmergingRegion, parsePct, strongestLinks } from "@shared/market-math";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 const fmt = (v: string | number | null | undefined, dec = 2) => {
@@ -39,9 +40,14 @@ const Panel = ({ children, style }: { children: React.ReactNode; style?: React.C
 );
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface ETFRow { ticker?: string | null; price?: string | null; d1?: string | null; d5?: string | null; ytd?: string | null; aum?: string | null; pe?: string | null; yld?: string | null; rsi?: number | string | null; signal?: string | null; }
+interface ETFRow {
+  ticker?: string | null; price?: string | null; d1?: string | null; d5?: string | null; ytd?: string | null;
+  aum?: string | null; pe?: string | null; yld?: string | null; rsi?: number | string | null; signal?: string | null;
+  ma50?: string | null; ma200?: string | null; vs200?: string | null; macd?: string | null; bb?: string | null; trend?: string | null;
+  vol?: string | null; volume?: number | null;
+}
 interface RegionRow { name?: string | null; code?: string | null; d1?: string | null; region?: string | null; }
-interface SectorRow { sector?: string | null; value?: string | null; }
+interface SectorRow { sector?: string | null; value?: string | null; d5?: string | null; ytd?: string | null; }
 interface FXRow { pair?: string; rate?: string | null; d1?: string | null; }
 
 interface TabProps {
@@ -222,12 +228,8 @@ const trEven: React.CSSProperties = { background: "var(--paper)" };
 
 // ─── TAB II: REGIONS ─────────────────────────────────────────────────────────
 export function RegionsView({ etfData, regions }: Pick<TabProps, "etfData" | "regions">) {
-  const dm = regions.filter(r => r.region === "developed").length > 0
-    ? regions.filter(r => r.region === "developed")
-    : FALLBACK_REGIONS_DM;
-  const em = regions.filter(r => r.region === "emerging").length > 0
-    ? regions.filter(r => r.region === "emerging")
-    : FALLBACK_REGIONS_EM;
+  const dm = regions.filter(r => isDevelopedRegion(r.region));
+  const em = regions.filter(r => isEmergingRegion(r.region));
 
   const regionStats = useMemo(() => {
     const dmChanges = dm.map(r => parseFloat(String(r.d1 || "0"))).filter(v => !isNaN(v));
@@ -359,7 +361,7 @@ export function RegionsView({ etfData, regions }: Pick<TabProps, "etfData" | "re
 
 // ─── TAB III: SECTORS ────────────────────────────────────────────────────────
 export function SectorsView({ sectors }: Pick<TabProps, "sectors">) {
-  const data = sectors.length > 0 ? sectors : FALLBACK_SECTORS;
+  const data = sectors;
   const sorted = [...data].sort((a, b) => parseFloat(b.value || "0") - parseFloat(a.value || "0"));
 
   return (
@@ -409,17 +411,17 @@ export function SectorsView({ sectors }: Pick<TabProps, "sectors">) {
             </tr></thead>
             <tbody>
               {sorted.map((s, i) => {
-                const v = parseFloat(s.value || "0");
-                const ytd = v * 3.2 + (Math.random() * 2 - 1);
-                const d5 = v * 1.8 + (Math.random() * 0.5 - 0.25);
+                const v = parsePct(s.value);
+                const ytd = s.ytd != null && s.ytd !== "" ? parsePct(s.ytd) : null;
+                const d5 = s.d5 != null && s.d5 !== "" ? parsePct(s.d5) : null;
                 const status = v > 1.5 ? "LEADING" : v > 0 ? "ADVANCING" : v > -1.5 ? "LAGGING" : "DECLINING";
                 return (
                   <tr key={i} style={i % 2 === 1 ? trEven : {}}>
                     <td style={tdLeft}>{SECTOR_NAMES[s.sector || ""] || s.sector}</td>
                     <td style={tdStyle}>{SECTOR_ETFS[s.sector || ""] || "—"}</td>
                     <td style={{ ...tdStyle, color: v >= 0 ? "var(--green)" : "var(--red)", fontWeight: 500 }}>{v >= 0 ? "+" : ""}{v.toFixed(2)}%</td>
-                    <td style={{ ...tdStyle, color: d5 >= 0 ? "var(--green)" : "var(--red)" }}>{d5 >= 0 ? "+" : ""}{d5.toFixed(2)}%</td>
-                    <td style={{ ...tdStyle, color: ytd >= 0 ? "var(--green)" : "var(--red)" }}>{ytd >= 0 ? "+" : ""}{ytd.toFixed(1)}%</td>
+                    <td style={{ ...tdStyle, color: d5 === null ? "var(--ink-4)" : d5 >= 0 ? "var(--green)" : "var(--red)" }}>{d5 === null ? "—" : `${d5 >= 0 ? "+" : ""}${d5.toFixed(2)}%`}</td>
+                    <td style={{ ...tdStyle, color: ytd === null ? "var(--ink-4)" : ytd >= 0 ? "var(--green)" : "var(--red)" }}>{ytd === null ? "—" : `${ytd >= 0 ? "+" : ""}${ytd.toFixed(1)}%`}</td>
                     <td style={{ ...tdStyle, fontSize: "7px", letterSpacing: "0.06em", color: v > 0 ? "var(--green)" : "var(--red)" }}>{status}</td>
                   </tr>
                 );
@@ -433,15 +435,34 @@ export function SectorsView({ sectors }: Pick<TabProps, "sectors">) {
 }
 
 // ─── TAB IV: FACTORS ─────────────────────────────────────────────────────────
-export function FactorsView() {
+export function FactorsView({
+  factors,
+  radar,
+}: {
+  factors?: { name: string; ticker: string; price: string; d1: string; ytd: string; aum: string }[];
+  radar?: { current: RadarData; prior: RadarData };
+}) {
   const radarRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     if (!radarRef.current) return;
-    const d: RadarData = { growth: 0.62, inflation: -0.15, rates: -0.28, credit: 0.44, usd: 0.31, oil: 0.52 };
-    const p: RadarData = { growth: 0.55, inflation: -0.10, rates: -0.25, credit: 0.40, usd: 0.28, oil: 0.48 };
+    const d: RadarData = radar?.current ?? { growth: 0, inflation: 0, rates: 0, credit: 0, usd: 0, oil: 0 };
+    const p: RadarData = radar?.prior ?? d;
     drawRadarChart(radarRef.current, d, p);
-  }, []);
+  }, [radar]);
+
+  const rows = FACTOR_DATA.map((f) => {
+    const live = factors?.find((x) => x.ticker === f.ticker || x.name === f.name);
+    if (!live) return { ...f, d1: "—", ytd: "—", aum: "—" };
+    const d1n = parsePct(live.d1);
+    const ytdn = parsePct(live.ytd);
+    return {
+      ...f,
+      d1: `${d1n > 0 ? "+" : ""}${d1n.toFixed(2)}%`,
+      ytd: `${ytdn > 0 ? "+" : ""}${ytdn.toFixed(1)}%`,
+      aum: live.aum || "—",
+    };
+  });
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 0, flex: 1, minHeight: 0 }}>
@@ -482,7 +503,7 @@ export function FactorsView() {
               <th style={{ ...thStyle, textAlign: "left" as const }}>DESCRIPTION</th>
             </tr></thead>
             <tbody>
-              {FACTOR_DATA.map((f, i) => {
+              {rows.map((f, i) => {
                 const d1 = parseFloat(f.d1);
                 const ytd = parseFloat(f.ytd);
                 return (
@@ -512,27 +533,28 @@ export function FactorsView() {
 }
 
 // ─── TAB V: CORRELATION ──────────────────────────────────────────────────────
-export function CorrelationView() {
+export function CorrelationView({
+  correlation,
+}: {
+  correlation?: { tickers: string[]; matrix: number[][] };
+}) {
   const heatmapRef = useRef<HTMLCanvasElement>(null);
   const curveRef   = useRef<HTMLCanvasElement>(null);
+  const tickers = correlation?.tickers?.length ? correlation.tickers : TICKERS_14;
+  const matrix = correlation?.matrix?.length ? correlation.matrix : tickers.map((_, i) => tickers.map((__, j) => (i === j ? 1 : 0)));
 
   useEffect(() => {
-    if (heatmapRef.current) drawCorrelationHeatmap(heatmapRef.current, CORR_MATRIX);
-  }, []);
+    if (heatmapRef.current) drawCorrelationHeatmap(heatmapRef.current, matrix);
+  }, [matrix]);
 
   useEffect(() => {
-    if (curveRef.current) drawVolatilityCurve(curveRef.current, [18.5, 17.2, 16.8, 16.5, 16.2, 16.0], [19.1, 18.3, 17.9, 17.5, 17.2, 17.0]);
+    if (curveRef.current) drawVolatilityCurve(curveRef.current, [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]);
   }, []);
 
-  const strongLinks = useMemo(() => {
-    const pairs: { a: string; b: string; r: number }[] = [];
-    for (let i = 0; i < TICKERS_14.length; i++) {
-      for (let j = i + 1; j < TICKERS_14.length; j++) {
-        pairs.push({ a: TICKERS_14[i], b: TICKERS_14[j], r: CORR_MATRIX[i][j] });
-      }
-    }
-    return pairs.sort((a, b) => Math.abs(b.r) - Math.abs(a.r)).slice(0, 12);
-  }, []);
+  const strongLinks = useMemo(
+    () => strongestLinks(tickers, matrix, 12),
+    [tickers, matrix]
+  );
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 0, flex: 1, minHeight: 0 }}>
@@ -583,7 +605,7 @@ export function CorrelationView() {
 
 // ─── TAB VI: FUNDAMENTALS ────────────────────────────────────────────────────
 export function FundamentalsView({ etfData, selectedETF, setSelectedETF }: Pick<TabProps, "etfData" | "selectedETF" | "setSelectedETF">) {
-  const data = etfData.length > 0 ? etfData.slice(0, 14) : FALLBACK_ETF;
+  const data = etfData.slice(0, 14);
   const FUND_EXTRA: Record<string, { pb: string; nav: string; premium: string; expense: string; inception: string; index: string }> = {
     SPY:  { pb:"4.2", nav:"548.18", premium:"+0.01%", expense:"0.09%", inception:"1993", index:"S&P 500" },
     QQQ:  { pb:"7.8", nav:"445.28", premium:"+0.01%", expense:"0.20%", inception:"1999", index:"Nasdaq-100" },
@@ -651,8 +673,15 @@ export function FundamentalsView({ etfData, selectedETF, setSelectedETF }: Pick<
 export function TechnicalsView({ etfData, selectedETF, setSelectedETF }: Pick<TabProps, "etfData" | "selectedETF" | "setSelectedETF">) {
   const liquidityRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    if (liquidityRef.current) drawLiquidityDepth(liquidityRef.current, [180,220,195,240,210,185,230], [175,215,200,235,205,190,225], 205);
-  }, []);
+    const vols = etfData.map(e => parseFloat(String(e.vol || "0")) || 0);
+    const scale = Math.max(...vols, 1);
+    const bids = vols.slice(0, 7).map(v => (v / scale) * 240);
+    const asks = bids.map(v => v * 0.97);
+    const mid = bids.length ? bids.reduce((a, b) => a + b, 0) / bids.length : 0;
+    if (liquidityRef.current) drawLiquidityDepth(liquidityRef.current, bids.length ? bids : [0,0,0,0,0,0,0], asks.length ? asks : [0,0,0,0,0,0,0], mid);
+  }, [etfData]);
+
+  const rows = etfData.slice(0, 14);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 0, flex: 1, minHeight: 0 }}>
@@ -673,25 +702,27 @@ export function TechnicalsView({ etfData, selectedETF, setSelectedETF }: Pick<Ta
               <th style={thStyle}>SIGNAL</th>
             </tr></thead>
             <tbody>
-              {TECH_DATA.map((t, i) => {
-                const rsi = t.rsi;
+              {rows.map((t, i) => {
+                const rsi = Number(t.rsi) || 0;
                 const rsiColor = rsi > 70 ? "var(--red)" : rsi < 30 ? "var(--green)" : "var(--ink)";
-                const vs200 = parseFloat(t.vs200);
-                const macd = parseFloat(t.macd);
-                const trendColor = t.trend === "Uptrend" ? "var(--green)" : t.trend === "Downtrend" ? "var(--red)" : "var(--ink-3)";
+                const vs200 = parseFloat(String(t.vs200 || "0"));
+                const macd = parseFloat(String(t.macd || "0"));
+                const trend = t.trend || "Sideways";
+                const bb = (t.bb || "mid").toLowerCase();
+                const trendColor = trend === "Uptrend" ? "var(--green)" : trend === "Downtrend" ? "var(--red)" : "var(--ink-3)";
                 return (
                   <tr key={i} style={{ ...(i % 2 === 1 ? trEven : {}), cursor: "pointer", background: selectedETF === t.ticker ? "var(--paper-2)" : undefined }}
-                    onClick={() => setSelectedETF(t.ticker)}>
+                    onClick={() => setSelectedETF(t.ticker || "SPY")}>
                     <td style={{ ...tdLeft, color: "var(--amber)" }}>{t.ticker}</td>
-                    <td style={tdStyle}>{(etfData.find(e => e.ticker === t.ticker)?.price) || "—"}</td>
-                    <td style={{ ...tdStyle, color: rsiColor, fontWeight: 600 }}>{rsi}</td>
-                    <td style={tdStyle}>{t.ma50}</td>
-                    <td style={tdStyle}>{t.ma200}</td>
-                    <td style={{ ...tdStyle, color: vs200 >= 0 ? "var(--green)" : "var(--red)", fontWeight: 500 }}>{t.vs200}</td>
-                    <td style={{ ...tdStyle, color: macd >= 0 ? "var(--green)" : "var(--red)" }}>{t.macd}</td>
-                    <td style={{ ...tdStyle, fontSize: "8px", letterSpacing: "0.04em", color: t.bb === "upper" ? "var(--green)" : t.bb === "lower" ? "var(--red)" : "var(--ink-3)" }}>{t.bb.toUpperCase()}</td>
-                    <td style={{ ...tdStyle, color: trendColor, fontSize: "9px" }}>{t.trend}</td>
-                    <td style={{ ...tdStyle, fontSize: "8px", letterSpacing: "0.06em", color: t.signal === "BULL" ? "var(--green)" : t.signal === "BEAR" ? "var(--red)" : "var(--ink-3)" }}>{t.signal}</td>
+                    <td style={tdStyle}>{t.price || "—"}</td>
+                    <td style={{ ...tdStyle, color: rsiColor, fontWeight: 600 }}>{t.rsi != null ? rsi.toFixed(0) : "—"}</td>
+                    <td style={tdStyle}>{t.ma50 || "—"}</td>
+                    <td style={tdStyle}>{t.ma200 || "—"}</td>
+                    <td style={{ ...tdStyle, color: vs200 >= 0 ? "var(--green)" : "var(--red)", fontWeight: 500 }}>{t.vs200 ? `${vs200 >= 0 ? "+" : ""}${vs200.toFixed(1)}%` : "—"}</td>
+                    <td style={{ ...tdStyle, color: macd >= 0 ? "var(--green)" : "var(--red)" }}>{t.macd || "—"}</td>
+                    <td style={{ ...tdStyle, fontSize: "8px", letterSpacing: "0.04em", color: bb === "upper" ? "var(--green)" : bb === "lower" ? "var(--red)" : "var(--ink-3)" }}>{bb.toUpperCase()}</td>
+                    <td style={{ ...tdStyle, color: trendColor, fontSize: "9px" }}>{trend}</td>
+                    <td style={{ ...tdStyle, fontSize: "8px", letterSpacing: "0.06em", color: t.signal === "BULL" ? "var(--green)" : t.signal === "BEAR" ? "var(--red)" : "var(--ink-3)" }}>{t.signal || "—"}</td>
                   </tr>
                 );
               })}
@@ -704,18 +735,18 @@ export function TechnicalsView({ etfData, selectedETF, setSelectedETF }: Pick<Ta
         <canvas ref={liquidityRef} style={{ display: "block", width: "100%", height: "200px" }}></canvas>
         <div style={{ padding: "var(--sp-md) var(--sp-lg)", borderTop: "1px solid var(--rule)", flex: 1, overflowY: "auto" }}>
           <div style={{ fontFamily: "var(--mono)", fontSize: "7px", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--ink-4)", marginBottom: "var(--sp-md)" }}>RSI EXTREMES</div>
-          {TECH_DATA.filter(t => t.rsi > 65 || t.rsi < 35).map((t, i) => (
+          {rows.filter(t => Number(t.rsi) > 65 || Number(t.rsi) < 35).map((t, i) => (
             <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid var(--rule-2)", fontFamily: "var(--mono)", fontSize: "9px" }}>
               <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{t.ticker}</span>
-              <span style={{ color: "var(--ink-3)" }}>{t.trend}</span>
-              <span style={{ color: t.rsi > 65 ? "var(--red)" : "var(--green)", fontWeight: 600 }}>RSI {t.rsi}</span>
+              <span style={{ color: "var(--ink-3)" }}>{t.trend || "—"}</span>
+              <span style={{ color: Number(t.rsi) > 65 ? "var(--red)" : "var(--green)", fontWeight: 600 }}>RSI {t.rsi}</span>
             </div>
           ))}
           <div style={{ fontFamily: "var(--mono)", fontSize: "7px", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--ink-4)", marginTop: "var(--sp-lg)", marginBottom: "var(--sp-md)" }}>ABOVE 200D MA</div>
-          {TECH_DATA.filter(t => parseFloat(t.vs200) > 0).map((t, i) => (
+          {rows.filter(t => parseFloat(String(t.vs200 || "0")) > 0).map((t, i) => (
             <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid var(--rule-2)", fontFamily: "var(--mono)", fontSize: "9px" }}>
               <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{t.ticker}</span>
-              <span style={{ color: "var(--green)", fontWeight: 500 }}>{t.vs200}</span>
+              <span style={{ color: "var(--green)", fontWeight: 500 }}>{t.vs200}%</span>
             </div>
           ))}
         </div>

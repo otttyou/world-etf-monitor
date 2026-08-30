@@ -10,7 +10,7 @@ async function getYF() {
   if (!_yf) {
     const mod = await import("yahoo-finance2");
     const YahooFinance = mod.default;
-    _yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
+    _yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
   }
   return _yf;
 }
@@ -37,6 +37,17 @@ export const FX_SYMBOL_MAP: Record<string, string> = {
   "USD/INR": "INR=X",
   "USD/BRL": "BRL=X",
   "USD/TRY": "TRY=X",
+};
+
+export const FACTOR_ETF_MAP: Record<string, string> = {
+  Momentum: "MTUM",
+  Quality: "QUAL",
+  Value: "VTV",
+  "Size (Small)": "IWM",
+  "Low Vol": "USMV",
+  Yield: "DVY",
+  Growth: "VUG",
+  ESG: "ESGU",
 };
 
 export const REGION_ETF_MAP: Record<string, string> = {
@@ -203,20 +214,7 @@ export async function fetchVolatilityData(): Promise<{
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
-export function calculateRSI(closes: number[], period = 14): number {
-  if (closes.length < period + 1) return 50;
-  let gains = 0, losses = 0;
-  for (let i = closes.length - period; i < closes.length; i++) {
-    const diff = closes[i] - closes[i - 1];
-    if (diff > 0) gains += diff;
-    else losses += Math.abs(diff);
-  }
-  const avgGain = gains / period;
-  const avgLoss = losses / period;
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return Math.round(100 - 100 / (1 + rs));
-}
+export { calculateRSI } from "@shared/market-math";
 
 export function formatMarketCap(v: number | null): string {
   if (!v) return "—";

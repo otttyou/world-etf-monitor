@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import {
+  isDevelopedRegion,
+  isEmergingRegion,
+  parsePct,
+  strongestLinks,
+  vixPhase,
+} from "@shared/market-math";
+import {
   RegionsView,
   SectorsView,
   FactorsView,
@@ -81,18 +88,10 @@ const EXCHANGE_MARKERS: ExchangeMarker[] = [
 const TICKERS_ALL = ["SPY","QQQ","IWM","ACWI","EFA","EEM","EWJ","MCHI","INDA","EWZ","EWG","EWU","TLT","GLD",
   "VTI","VEA","VWO","AGG","LQD","HYG","GDX","SLV","USO","XLE","XLF","XLK","XLV","XLI","XLP","XLU","XLRE"];
 
-const STRONGEST_LINKS = [
-  { a: "EFA",  b: "EWG",  r: 0.94, type: "equity · dmd" },
-  { a: "EEM",  b: "VWO",  r: 0.93, type: "equity · gld" },
-  { a: "MCHI", b: "FXI",  r: 0.90, type: "equity · dmd" },
-  { a: "GLD",  b: "SLV",  r: 0.91, type: "metals · gld" },
-  { a: "TLT",  b: "LQD",  r: 0.69, type: "rates/credit" },
-  { a: "SPY",  b: "EFA",  r: 0.81, type: "developed" },
-  { a: "EWJ",  b: "DXJ",  r: -0.58, type: "yen-hedged lev." },
-  { a: "VNQ",  b: "TLT",  r: 0.57, type: "long-duration" },
-  { a: "HYG",  b: "SPY",  r: 0.58, type: "credit-equity" },
-  { a: "XLE",  b: "USO",  r: 0.84, type: "energy complex" },
-];
+const COUNTRY_ETF_FALLBACK: Record<string, string> = {
+  US: "SPY", JP: "EWJ", CN: "MCHI", IN: "INDA", BR: "EWZ",
+  DE: "EWG", UK: "EWU", FR: "EFA",
+};
 
 const NEWS_ITEMS = [
   { time: "14:42", text: "TIPS breakevens edge to 2.94% — real yields compress" },
@@ -124,96 +123,84 @@ export default function Observatory() {
   const volatilityCanvasRef = useRef<HTMLCanvasElement>(null);
   const heatmapCanvasRef  = useRef<HTMLCanvasElement>(null);
 
-  // ── Data queries ──────────────────────────────────────────────────────────
-  const etfPrices      = trpc.market.etfPrices.useQuery();
-  const regionalIndices = trpc.market.regionalIndices.useQuery();
-  const fxRates        = trpc.market.fxRates.useQuery();
-  const sectorData     = trpc.market.sectorData.useQuery();
-  const utils          = trpc.useUtils();
-
-  const refreshETF     = trpc.market.refreshETFData.useMutation({ onMutate: () => setIsRefreshing(true), onSettled: () => setIsRefreshing(false) });
-  const refreshRegional = trpc.market.refreshRegionalData.useMutation({ onMutate: () => setIsRefreshing(true), onSettled: () => setIsRefreshing(false) });
-  const refreshFX      = trpc.market.refreshFXData.useMutation({ onMutate: () => setIsRefreshing(true), onSettled: () => setIsRefreshing(false) });
-  const refreshSector  = trpc.market.refreshSectorData.useMutation({ onMutate: () => setIsRefreshing(true), onSettled: () => setIsRefreshing(false) });
+  // ── Live queries (Yahoo snapshot, refreshes every 60s) ────────────────────
+  const liveOpts = { refetchInterval: 60_000 as const, staleTime: 30_000 };
+  const etfPrices       = trpc.market.etfPrices.useQuery(undefined, liveOpts);
+  const regionalIndices = trpc.market.regionalIndices.useQuery(undefined, liveOpts);
+  const fxRates         = trpc.market.fxRates.useQuery(undefined, liveOpts);
+  const sectorData      = trpc.market.sectorData.useQuery(undefined, liveOpts);
+  const volatilityQ     = trpc.market.volatility.useQuery(undefined, liveOpts);
+  const correlationQ    = trpc.market.correlation.useQuery(undefined, liveOpts);
+  const radarQ          = trpc.market.radar.useQuery(undefined, liveOpts);
+  const factorsQ        = trpc.market.factors.useQuery(undefined, liveOpts);
 
   useEffect(() => {
-    const run = async () => {
-      setLastUpdated(new Date());
-      try {
-        await Promise.all([refreshETF.mutateAsync(), refreshRegional.mutateAsync(), refreshFX.mutateAsync(), refreshSector.mutateAsync()]);
-        await Promise.all([utils.market.etfPrices.invalidate(), utils.market.regionalIndices.invalidate(), utils.market.fxRates.invalidate(), utils.market.sectorData.invalidate()]);
-      } catch {}
-    };
-    run();
-    const id = setInterval(run, 60000);
-    return () => clearInterval(id);
-  }, []);
+    const fetching =
+      etfPrices.isFetching || regionalIndices.isFetching ||
+      fxRates.isFetching || sectorData.isFetching;
+    setIsRefreshing(fetching);
+  }, [etfPrices.isFetching, regionalIndices.isFetching, fxRates.isFetching, sectorData.isFetching]);
+
+  useEffect(() => {
+    const ts = etfPrices.dataUpdatedAt || regionalIndices.dataUpdatedAt;
+    if (ts) setLastUpdated(new Date(ts));
+  }, [etfPrices.dataUpdatedAt, regionalIndices.dataUpdatedAt]);
 
   const etfData  = etfPrices.data      || [];
   const sectors  = sectorData.data     || [];
   const regions  = regionalIndices.data || [];
   const fx       = fxRates.data        || [];
+  const factors  = factorsQ.data       || [];
+  const vol      = volatilityQ.data;
 
   // ── Derived stats ─────────────────────────────────────────────────────────
-  const advancers = useMemo(() => etfData.filter(e => parseFloat(e.d1 || "0") > 0).length, [etfData]);
+  const advancers = useMemo(() => etfData.filter(e => parsePct(e.d1) > 0).length, [etfData]);
   const dispersion = useMemo(() => {
-    const vals = etfData.map(e => parseFloat(e.d1 || "0")).filter(v => !isNaN(v));
-    if (vals.length < 2) return 0.47;
-    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const variance = vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length;
+    const nums = etfData.map(e => parseFloat(String(e.d1 || ""))).filter(v => !isNaN(v));
+    if (nums.length < 2) return 0;
+    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+    const variance = nums.reduce((a, b) => a + (b - avg) ** 2, 0) / nums.length;
     return Math.sqrt(variance);
   }, [etfData]);
   const totalAUM = useMemo(() => {
-    const total = etfData.reduce((sum, e) => {
+    return etfData.reduce((sum, e) => {
       const v = parseFloat(String(e.aum || "0").replace(/[^0-9.]/g, ""));
       return sum + (isNaN(v) ? 0 : v);
     }, 0);
-    return total > 0 ? total : 220;
   }, [etfData]);
 
-  // ── Correlation matrix (seeded from returns) ──────────────────────────────
+  const corrTickers = correlationQ.data?.tickers ?? ["SPY","QQQ","IWM","ACWI","EFA","EEM","EWJ","MCHI","INDA","EWZ","EWG","EWU","TLT","GLD"];
   const corrMatrix = useMemo(() => {
-    const tickers = ["SPY","QQQ","IWM","ACWI","EFA","EEM","EWJ","MCHI","INDA","EWZ","EWG","EWU","TLT","GLD"];
-    const base: Record<string, Record<string, number>> = {
-      SPY:  { QQQ:0.96, IWM:0.91, ACWI:0.97, EFA:0.82, EEM:0.72, EWJ:0.65, MCHI:0.55, INDA:0.62, EWZ:0.58, EWG:0.80, EWU:0.78, TLT:-0.18, GLD:0.12 },
-      QQQ:  { IWM:0.87, ACWI:0.93, EFA:0.78, EEM:0.68, EWJ:0.61, MCHI:0.52, INDA:0.59, EWZ:0.54, EWG:0.76, EWU:0.74, TLT:-0.22, GLD:0.08 },
-      IWM:  { ACWI:0.88, EFA:0.74, EEM:0.65, EWJ:0.58, MCHI:0.48, INDA:0.55, EWZ:0.52, EWG:0.72, EWU:0.70, TLT:-0.14, GLD:0.10 },
-      ACWI: { EFA:0.91, EEM:0.85, EWJ:0.72, MCHI:0.62, INDA:0.70, EWZ:0.65, EWG:0.88, EWU:0.86, TLT:-0.12, GLD:0.18 },
-      EFA:  { EEM:0.78, EWJ:0.80, MCHI:0.65, INDA:0.72, EWZ:0.68, EWG:0.94, EWU:0.92, TLT:-0.08, GLD:0.22 },
-      EEM:  { EWJ:0.68, MCHI:0.82, INDA:0.88, EWZ:0.75, EWG:0.72, EWU:0.70, TLT:-0.05, GLD:0.28 },
-      EWJ:  { MCHI:0.58, INDA:0.62, EWZ:0.55, EWG:0.76, EWU:0.74, TLT:0.02, GLD:0.15 },
-      MCHI: { INDA:0.72, EWZ:0.62, EWG:0.60, EWU:0.58, TLT:-0.02, GLD:0.20 },
-      INDA: { EWZ:0.65, EWG:0.68, EWU:0.66, TLT:-0.04, GLD:0.18 },
-      EWZ:  { EWG:0.62, EWU:0.60, TLT:-0.06, GLD:0.24 },
-      EWG:  { EWU:0.90, TLT:-0.10, GLD:0.16 },
-      EWU:  { TLT:-0.08, GLD:0.14 },
-      TLT:  { GLD:0.42 },
-      GLD:  {},
-    };
-    return tickers.map((r, i) => tickers.map((c, j) => {
-      if (i === j) return 1;
-      const v = base[r]?.[c] ?? base[c]?.[r];
-      return v !== undefined ? v : 0;
-    }));
-  }, []);
+    const m = correlationQ.data?.matrix;
+    if (m && m.length) return m;
+    return corrTickers.map((_, i) => corrTickers.map((__, j) => (i === j ? 1 : 0)));
+  }, [correlationQ.data, corrTickers]);
 
-  // ── Country nodes from live data ──────────────────────────────────────────
+  const liveLinks = useMemo(
+    () => strongestLinks(corrTickers, corrMatrix, 10),
+    [corrTickers, corrMatrix]
+  );
+
+  const developed = useMemo(() => regions.filter(r => isDevelopedRegion(r.region)), [regions]);
+  const emerging  = useMemo(() => regions.filter(r => isEmergingRegion(r.region)), [regions]);
+
+  // ── Country nodes from live regional (then ETF) data — never random ───────
   const countryNodes = useMemo<CountryNode[]>(() => {
-    const tickerMap: Record<string, string> = { SPY:"US", EWJ:"JP", MCHI:"CN", INDA:"IN", EWZ:"BR", EWG:"DE", EWU:"UK", EFA:"UK", EEM:"IN" };
     return COUNTRY_NODES.map(n => {
-      const ticker = Object.entries(tickerMap).find(([, c]) => c === n.code)?.[0];
-      const etf = etfData.find(e => e.ticker === ticker);
-      return { ...n, change: etf ? parseFloat(etf.d1 || "0") || 0 : (Math.random() * 3 - 1.5) };
+      const region = regions.find(r => r.code === n.code || r.name === n.name);
+      if (region) return { ...n, change: parsePct(region.d1) };
+      const ticker = COUNTRY_ETF_FALLBACK[n.code];
+      const etf = ticker ? etfData.find(e => e.ticker === ticker) : undefined;
+      return { ...n, change: etf ? parsePct(etf.d1) : 0 };
     });
-  }, [etfData]);
+  }, [regions, etfData]);
 
-  // ── Sector rose data from live sectors ────────────────────────────────────
+  // ── Sector rose from live 1D % — missing sectors stay at 0, not random ────
   const sectorRoseData = useMemo(() => {
-    const map: Record<string, string> = { TECH:"XLK", COMM:"XLC", DISC:"XLY", FIN:"XLF", INDU:"XLI", MATS:"XLB", ENER:"XLE", HLTH:"XLV", STAP:"XLP", UTIL:"XLU", REAL:"XLRE" };
     const names = ["TECH","COMM","DISC","FIN","INDU","MATS","ENER","HLTH","STAP","UTIL","REAL"];
     return names.map(name => {
-      const s = sectors.find(sec => sec.sector === name || sec.sector === map[name]);
-      return { name, value: s ? parseFloat(s.value || "0") || 0 : (Math.random() * 4 - 2) };
+      const s = sectors.find(sec => sec.sector === name);
+      return { name, value: s ? parsePct(s.value) : 0 };
     });
   }, [sectors]);
 
@@ -235,13 +222,13 @@ export default function Observatory() {
   // ── Draw charts ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!radarCanvasRef.current) return;
-    const curr: RadarData = { growth: 0.62, inflation: -0.15, rates: -0.28, credit: 0.44, usd: 0.31, oil: 0.52 };
-    const prev: RadarData = { growth: 0.55, inflation: -0.10, rates: -0.25, credit: 0.40, usd: 0.28, oil: 0.48 };
+    const curr: RadarData = radarQ.data?.current ?? { growth: 0, inflation: 0, rates: 0, credit: 0, usd: 0, oil: 0 };
+    const prev: RadarData = radarQ.data?.prior ?? curr;
     drawRadarChart(radarCanvasRef.current, curr, prev);
-  }, []);
+  }, [radarQ.data]);
 
   useEffect(() => {
-    if (!mapCanvasRef.current || countryNodes.every(n => n.change === 0)) return;
+    if (!mapCanvasRef.current) return;
     drawEquirectangularMap(mapCanvasRef.current, countryNodes);
   }, [countryNodes]);
 
@@ -261,15 +248,18 @@ export default function Observatory() {
       { code: "B3",   hour: 12,   isOpen: isOpen(12, 21) },
     ];
     drawExchangeOrbit(orbitCanvasRef.current, markers);
-  }, []);
+  }, [lastUpdated]);
 
   useEffect(() => {
     if (!moonCanvasRef.current) return;
-    drawVolatilityMoon(moonCanvasRef.current, 18.5, 112, 104.2, "waxing gibbous");
-  }, []);
+    const vix = vol?.vix ?? 0;
+    const move = vol?.move ?? 0;
+    const dxy = vol?.dxy ?? 0;
+    drawVolatilityMoon(moonCanvasRef.current, vix, move, dxy, vixPhase(vix));
+  }, [vol]);
 
   useEffect(() => {
-    if (!roseCanvasRef.current || sectorRoseData.every(s => s.value === 0)) return;
+    if (!roseCanvasRef.current) return;
     drawSectorRose(roseCanvasRef.current, sectorRoseData);
   }, [sectorRoseData]);
 
@@ -280,15 +270,21 @@ export default function Observatory() {
 
   useEffect(() => {
     if (!liquidityCanvasRef.current) return;
-    const bids = [180, 220, 195, 240, 210, 185, 230];
-    const asks = [175, 215, 200, 235, 205, 190, 225];
-    drawLiquidityDepth(liquidityCanvasRef.current, bids, asks, 205);
-  }, []);
+    const vols = etfData.map(e => Number(e.volume) || parseFloat(String(e.vol || "0")) || 0);
+    const scale = Math.max(...vols, 1);
+    const bids = vols.slice(0, 7).map(v => (v / scale) * 240);
+    const asks = bids.map(v => v * 0.97);
+    const mid = bids.length ? bids.reduce((a, b) => a + b, 0) / bids.length : 0;
+    drawLiquidityDepth(liquidityCanvasRef.current, bids.length ? bids : [0, 0, 0, 0, 0, 0, 0], asks.length ? asks : [0, 0, 0, 0, 0, 0, 0], mid);
+  }, [etfData]);
 
   useEffect(() => {
     if (!volatilityCanvasRef.current) return;
-    drawVolatilityCurve(volatilityCanvasRef.current, [18.5, 17.2, 16.8, 16.5, 16.2, 16.0], [19.1, 18.3, 17.9, 17.5, 17.2, 17.0]);
-  }, []);
+    const vix = vol?.vix ?? 0;
+    const term = [vix, vix * 0.97, vix * 0.95, vix * 0.93, vix * 0.92, vix * 0.91];
+    const prior = term.map(v => v * 1.04);
+    drawVolatilityCurve(volatilityCanvasRef.current, term, prior);
+  }, [vol]);
 
   useEffect(() => {
     if (!heatmapCanvasRef.current) return;
@@ -331,17 +327,17 @@ export default function Observatory() {
         <div className="aesop-stat-block">
           <span className="caps">Composite Breadth</span>
           <span className="aesop-val" style={{ fontFamily: "var(--serif)", fontSize: "32px", lineHeight: 1, color: "var(--ink)" }}>
-            {advancers > 0 ? advancers : 70}
+            {advancers}
           </span>
           <span className="aesop-foot" style={{ fontFamily: "var(--mono)", fontSize: "9px", color: "var(--ink-4)", marginTop: "3px", lineHeight: 1.4 }}>
-            / {etfData.length || 100} advancers<br />
-            Δ +4 vs. prev. session · {etfData.length || 87} issues
+            / {etfData.length || 0} advancers<br />
+            {etfData.length} issues · live Yahoo
           </span>
         </div>
         <div className="aesop-stat-block">
           <span className="caps">Global Dispersion</span>
           <span className="aesop-val" style={{ fontFamily: "var(--serif)", fontSize: "32px", lineHeight: 1, color: "var(--ink)" }}>
-            {dispersion > 0 ? dispersion.toFixed(2) : "1.85"}
+            {dispersion.toFixed(2)}
           </span>
           <span className="aesop-foot" style={{ fontFamily: "var(--mono)", fontSize: "9px", color: "var(--ink-4)", marginTop: "3px", lineHeight: 1.4 }}>
             % σ regional<br />
@@ -351,7 +347,7 @@ export default function Observatory() {
         <div className="aesop-stat-block">
           <span className="caps">Liquidity Pulse</span>
           <span className="aesop-val" style={{ fontFamily: "var(--serif)", fontSize: "32px", lineHeight: 1, color: "var(--ink)" }}>
-            ${totalAUM > 0 ? (totalAUM / 1000).toFixed(1) : "113.5"}
+            ${totalAUM > 0 ? (totalAUM >= 1000 ? (totalAUM / 1000).toFixed(1) : totalAUM.toFixed(1)) : "—"}
           </span>
           <span className="aesop-foot" style={{ fontFamily: "var(--mono)", fontSize: "9px", color: "var(--ink-4)", marginTop: "3px", lineHeight: 1.4 }}>
             B ADV<br />
@@ -391,13 +387,13 @@ export default function Observatory() {
         {/* ── Tab IV: Factors ── */}
         {activeTab === "IV" && (
           <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
-            <FactorsView />
+            <FactorsView factors={factors} radar={radarQ.data} />
           </div>
         )}
         {/* ── Tab V: Correlation ── */}
         {activeTab === "V" && (
           <div style={{ flex: 1, padding: "var(--sp-lg)", overflowY: "auto" }}>
-            <CorrelationView />
+            <CorrelationView correlation={correlationQ.data} />
           </div>
         )}
         {/* ── Tab VI: Fundamentals ── */}
@@ -431,25 +427,11 @@ export default function Observatory() {
         <div className="aesop-left-rail">
           <div className="aesop-shead" style={{ fontSize: "11px" }}>
             <span>I. Regions</span>
-            <span className="aesop-shead-meta">{regions.length || 24} — SORTED BY GMT</span>
+            <span className="aesop-shead-meta">{regions.length} — LIVE 1D %</span>
           </div>
 
           <div className="aesop-section-label">DEVELOPED MARKETS</div>
-          {(regions.filter(r => r.region === "developed").length > 0
-            ? regions.filter(r => r.region === "developed")
-            : [
-                { name: "United States", code: "SPY", d1: "-0.13" },
-                { name: "Canada",        code: "EWC", d1: "-0.81" },
-                { name: "United Kingdom",code: "EWU", d1: "-0.48" },
-                { name: "Germany",       code: "EWG", d1: "+1.25" },
-                { name: "France",        code: "EWQ", d1: "-0.64" },
-                { name: "Japan",         code: "EWJ", d1: "+1.22" },
-                { name: "Australia",     code: "EWA", d1: "+1.54" },
-                { name: "Switzerland",   code: "EWL", d1: "+0.41" },
-                { name: "Sweden",        code: "EWD", d1: "+0.31" },
-                { name: "Singapore",     code: "EWS", d1: "+0.35" },
-              ] as Array<{ name: string; code: string; d1: string | null; region?: string | null }>
-          ).map((r, i) => {
+          {developed.map((r, i) => {
             const chg = parseFloat(String(r.d1 || "0"));
             const bars = [0.6, 0.4, 0.8, 0.3, 0.7, 0.5, 0.9, 0.2];
             return (
@@ -471,19 +453,7 @@ export default function Observatory() {
           })}
 
           <div className="aesop-section-label">EMERGING &amp; FRONTIER</div>
-          {(regions.filter(r => r.region === "emerging").length > 0
-            ? regions.filter(r => r.region === "emerging")
-            : [
-                { name: "China",       code: "MCHI", d1: "-0.33" },
-                { name: "India",       code: "INDA", d1: "+0.91" },
-                { name: "Korea",       code: "EWY",  d1: "+1.43" },
-                { name: "Taiwan",      code: "EWT",  d1: "+0.78" },
-                { name: "Brazil",      code: "EWZ",  d1: "-0.44" },
-                { name: "South Africa",code: "EZA",  d1: "+0.66" },
-                { name: "Indonesia",   code: "EIDO", d1: "-0.50" },
-                { name: "Mexico",      code: "EWW",  d1: "-0.09" },
-              ] as Array<{ name: string; code: string; d1: string | null; region?: string | null }>
-          ).map((r, i) => {
+          {emerging.map((r, i) => {
             const chg = parseFloat(String(r.d1 || "0"));
             const bars = [0.5, 0.7, 0.3, 0.8, 0.4, 0.6, 0.9, 0.2];
             return (
@@ -505,16 +475,7 @@ export default function Observatory() {
           })}
 
           <div className="aesop-section-label">FX RATES</div>
-          {(fx.length > 0 ? fx : [
-            { pair: "DXY",     rate: "104.22", d1: "+0.12" },
-            { pair: "EUR/USD", rate: "1.0845",  d1: "-0.08" },
-            { pair: "GBP/USD", rate: "1.2712",  d1: "+0.04" },
-            { pair: "USD/JPY", rate: "153.48",  d1: "+0.31" },
-            { pair: "USD/CNH", rate: "7.2415",  d1: "+0.02" },
-            { pair: "USD/INR", rate: "83.42",   d1: "-0.05" },
-            { pair: "USD/BRL", rate: "4.9820",  d1: "+0.18" },
-            { pair: "USD/TRY", rate: "32.15",   d1: "+0.42" },
-          ] as Array<{ pair: string; rate: string | null; d1: string | null }>).map((f, i) => {
+          {fx.map((f, i) => {
             const chg = parseFloat(String(f.d1 || "0"));
             return (
               <div key={i} className="aesop-fx-item">
@@ -575,10 +536,10 @@ export default function Observatory() {
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-md)" }}>
                 {[
-                  { label: "RISK", val: "On", sub: "RDRD 0.62 · +0.18 wow" },
-                  { label: "DURATION", val: "Short", sub: "2s10s −14bp · 30d" },
-                  { label: "BREADTH", val: "Widening", sub: "62% above 500MA" },
-                  { label: "VOLATILITY", val: "Subdued", sub: "VIX 15.2 · MOVE 72" },
+                  { label: "RISK", val: (radarQ.data?.current.growth ?? 0) >= 0 ? "On" : "Off", sub: `growth ${(radarQ.data?.current.growth ?? 0).toFixed(2)}` },
+                  { label: "DURATION", val: (radarQ.data?.current.rates ?? 0) >= 0 ? "Long" : "Short", sub: `TLT axis ${(radarQ.data?.current.rates ?? 0).toFixed(2)}` },
+                  { label: "BREADTH", val: advancers > (etfData.length / 2) ? "Widening" : "Narrow", sub: `${advancers}/${etfData.length || 0} advancers` },
+                  { label: "VOLATILITY", val: (vol?.vix ?? 0) < 20 ? "Subdued" : "Elevated", sub: `VIX ${(vol?.vix ?? 0).toFixed(1)} · MOVE ${(vol?.move ?? 0).toFixed(0)}` },
                 ].map((s, i) => (
                   <div key={i}>
                     <div style={{ fontFamily: "var(--mono)", fontSize: "7px", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--ink-4)", marginBottom: "2px" }}>{s.label}</div>
@@ -596,14 +557,7 @@ export default function Observatory() {
             <span className="aesop-shead-meta">S&amp;P GICS · 1D BY CAP</span>
           </div>
           <div className="aesop-sector-grid" style={{ flexShrink: 0 }}>
-            {(sectors.length > 0 ? sectors : [
-              { sector: "TECH", value: "2.1" }, { sector: "COMM", value: "-1.3" },
-              { sector: "DISC", value: "0.8" }, { sector: "FIN",  value: "1.2" },
-              { sector: "INDU", value: "0.5" }, { sector: "MATS", value: "-0.9" },
-              { sector: "ENER", value: "2.4" }, { sector: "HLTH", value: "-0.2" },
-              { sector: "STAP", value: "0.3" }, { sector: "UTIL", value: "-0.5" },
-              { sector: "REAL", value: "1.1" },
-            ]).map((s, i) => {
+            {sectors.map((s, i) => {
               const v = parseFloat(s.value || "0");
               return (
                 <div key={i} className={`aesop-sector ${v > 0 ? "pos" : "neg"}`}>
@@ -636,22 +590,7 @@ export default function Observatory() {
                 </tr>
               </thead>
               <tbody>
-                {(etfData.length > 0 ? etfData.slice(0, 14) : [
-                  { ticker:"SPY",  price:"548.21", d1:"-0.13", d5:"-1.2", ytd:"-4.8", aum:"$512B", pe:"22.4", yld:"1.3", rsi:48, signal:"NEUTRAL" },
-                  { ticker:"QQQ",  price:"445.32", d1:"-0.22", d5:"-2.1", ytd:"-7.2", aum:"$218B", pe:"31.2", yld:"0.6", rsi:44, signal:"BEAR" },
-                  { ticker:"IWM",  price:"198.44", d1:"-0.45", d5:"-3.1", ytd:"-9.8", aum:"$52B",  pe:"18.1", yld:"1.5", rsi:41, signal:"BEAR" },
-                  { ticker:"ACWI", price:"102.18", d1:"-0.08", d5:"-0.9", ytd:"-3.2", aum:"$22B",  pe:"19.8", yld:"1.8", rsi:50, signal:"NEUTRAL" },
-                  { ticker:"EFA",  price:"78.45",  d1:"+0.31", d5:"+0.8", ytd:"+2.1", aum:"$48B",  pe:"15.2", yld:"2.9", rsi:58, signal:"BULL" },
-                  { ticker:"EEM",  price:"48.21",  d1:"-0.64", d5:"-1.8", ytd:"-2.4", aum:"$27B",  pe:"12.4", yld:"2.6", rsi:46, signal:"NEUTRAL" },
-                  { ticker:"EWJ",  price:"62.18",  d1:"+1.22", d5:"+2.4", ytd:"+4.8", aum:"$8B",   pe:"14.8", yld:"2.1", rsi:62, signal:"BULL" },
-                  { ticker:"MCHI", price:"44.32",  d1:"-0.33", d5:"-0.8", ytd:"+1.2", aum:"$3B",   pe:"11.2", yld:"1.4", rsi:52, signal:"NEUTRAL" },
-                  { ticker:"INDA", price:"52.44",  d1:"+0.91", d5:"+1.8", ytd:"+3.2", aum:"$6B",   pe:"22.8", yld:"0.8", rsi:60, signal:"BULL" },
-                  { ticker:"EWZ",  price:"28.18",  d1:"-0.44", d5:"-2.2", ytd:"-8.4", aum:"$4B",   pe:"8.4",  yld:"5.2", rsi:38, signal:"BEAR" },
-                  { ticker:"EWG",  price:"32.45",  d1:"+1.25", d5:"+2.8", ytd:"+5.4", aum:"$2B",   pe:"13.2", yld:"2.8", rsi:64, signal:"BULL" },
-                  { ticker:"EWU",  price:"36.21",  d1:"-0.48", d5:"-0.9", ytd:"+0.8", aum:"$2B",   pe:"12.8", yld:"3.4", rsi:49, signal:"NEUTRAL" },
-                  { ticker:"TLT",  price:"88.32",  d1:"+0.42", d5:"+1.2", ytd:"-6.8", aum:"$42B",  pe:"—",    yld:"4.8", rsi:55, signal:"NEUTRAL" },
-                  { ticker:"GLD",  price:"224.18", d1:"+0.18", d5:"+1.8", ytd:"+12.4",aum:"$68B",  pe:"—",    yld:"0.0", rsi:68, signal:"BULL" },
-                ]).map((etf, i) => (
+                {etfData.slice(0, 14).map((etf, i) => (
                   <tr key={i} onClick={() => setSelectedETF(etf.ticker || "SPY")} style={{ cursor: "pointer" }}>
                     <td style={{ fontWeight: 600, letterSpacing: "0.04em" }}>{etf.ticker}</td>
                     <td>{fmt(etf.price)}</td>
@@ -718,11 +657,10 @@ export default function Observatory() {
           </div>
           <div className="aesop-right-section">
             <ul className="aesop-list">
-              {STRONGEST_LINKS.map((link, i) => (
+              {liveLinks.map((link, i) => (
                 <li key={i} className="aesop-list-item">
                   <span className="aesop-list-item-label">
                     {link.a} · {link.b}
-                    <span style={{ color: "var(--ink-4)", marginLeft: "6px", fontSize: "8px" }}>{link.type}</span>
                   </span>
                   <span className={`aesop-list-item-value ${link.r > 0 ? "pos" : "neg"}`}>
                     {link.r > 0 ? "+" : ""}{link.r.toFixed(2)}
@@ -739,17 +677,17 @@ export default function Observatory() {
           </div>
           <div className="aesop-right-section">
             {(() => {
-              const e = selETF || { ticker: selectedETF, price: "48.21", d1: "-0.64", aum: "$27.48B", pe: "12.4", yld: "2.6", rsi: 46, signal: "NEUTRAL" };
+              const e = selETF || { ticker: selectedETF, price: null, d1: null, d5: null, ytd: null, aum: null, pe: null, yld: null, rsi: null, signal: null, vs200: null, ma50: null, ma200: null, trend: null };
               return (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-md)" }}>
                   {[
                     { label: "LAST",     val: fmt(e.price),   detail: `1D: ${fmtPct(e.d1)}` },
-                    { label: "AUM",      val: String(e.aum || "—"), detail: "EXPENSE 0.97%" },
-                    { label: "P/E",      val: String(e.pe || "—"),  detail: `P/B ${fmt(1.68)}` },
-                    { label: "DIV YIELD",val: fmtPct(e.yld),  detail: `NUE ${fmt(11.8)}%` },
-                    { label: "5 300",    val: "14.2%",         detail: `BETA ${fmt(0.92)}` },
-                    { label: "RSI 14",   val: e.rsi ? String(Number(e.rsi).toFixed(0)) : "—", detail: `VS 200D ${fmt(6.4)}%` },
-                    { label: "FLOWS 5W", val: "+$612M",        detail: `SHORT % ${fmt(2.1)}%` },
+                    { label: "AUM",      val: String(e.aum || "—"), detail: e.trend ? String(e.trend) : "" },
+                    { label: "P/E",      val: String(e.pe || "—"),  detail: e.ma50 ? `MA50 ${e.ma50}` : "" },
+                    { label: "DIV YIELD",val: fmtPct(e.yld),  detail: e.ma200 ? `MA200 ${e.ma200}` : "" },
+                    { label: "5D",       val: fmtPct(e.d5),   detail: "" },
+                    { label: "RSI 14",   val: e.rsi ? String(Number(e.rsi).toFixed(0)) : "—", detail: e.vs200 ? `VS 200D ${e.vs200}%` : "" },
+                    { label: "YTD",      val: fmtPct(e.ytd),  detail: "" },
                     { label: "SIGNAL",   val: String(e.signal || "—"), detail: "" },
                   ].map((s, i) => (
                     <div key={i} style={{ marginBottom: "var(--sp-sm)" }}>
