@@ -1,0 +1,12 @@
+{
+  "name": "World ETF Monitor",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "dev-server",
+      "command": "pnpm dev"
+    }
+  ],
+  "ports": [3000]
+}
