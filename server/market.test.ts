@@ -40,6 +40,16 @@ describe("Market Data Procedures", () => {
       expect(Array.isArray(result)).toBe(true);
     });
 
+    it("should return live Yahoo tickers, not hardcoded placeholders", async () => {
+      const result = await caller.market.etfPrices();
+      expect(result.length).toBeGreaterThan(0);
+      const spy = result.find((e) => e.ticker === "SPY");
+      expect(spy).toBeTruthy();
+      const price = parseFloat(spy!.price || "");
+      expect(Number.isFinite(price)).toBe(true);
+      expect(spy!.price).not.toBe("548.21");
+    });
+
     it("should have required fields in ETF data", async () => {
       const result = await caller.market.etfPrices();
       if (result.length > 0) {
@@ -69,6 +79,7 @@ describe("Market Data Procedures", () => {
         expect(region).toHaveProperty("code");
         expect(region).toHaveProperty("name");
         expect(region).toHaveProperty("region");
+        expect(["DM", "EM", "developed", "emerging"]).toContain(region.region);
       }
     });
 
@@ -117,6 +128,22 @@ describe("Market Data Procedures", () => {
     it("should handle refresh sector data mutation", async () => {
       const result = await caller.market.refreshSectorData();
       expect(result).toEqual({ success: true });
+    });
+  });
+
+  describe("Live snapshot extras", () => {
+    it("should return a correlation matrix for the 14 ETF universe", async () => {
+      const result = await caller.market.correlation();
+      expect(result.tickers.length).toBe(14);
+      expect(result.matrix.length).toBe(14);
+      expect(result.matrix[0][0]).toBe(1);
+    });
+
+    it("should return live factor quotes", async () => {
+      const result = await caller.market.factors();
+      expect(result.length).toBeGreaterThan(0);
+      expect(result[0]).toHaveProperty("ticker");
+      expect(result[0]).toHaveProperty("d1");
     });
   });
 
